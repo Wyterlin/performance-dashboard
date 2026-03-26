@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import SectionActivities from "./components/SectionActivities";
 import TicketSummaryCard from "./components/TicketSummaryCard";
 import { useWeeklyReport } from "./hooks/useWeeklyReport";
@@ -6,6 +7,7 @@ import { exportDashboardPdf, exportDashboardPptx } from "./services/exportServic
 const SUMMARY_MAX = 3000;
 
 export default function App() {
+  const exportMenuRef = useRef(null);
   const {
     startDate,
     setStartDate,
@@ -35,6 +37,28 @@ export default function App() {
   const operationalTotal = Number(ticketSummary?.total || 0);
   const repactTotal = Math.max(Number(ticketSummary?.totalCombined || 0) - operationalTotal, 0);
   const highlightedKpiTotal = Math.max(operationalTotal + manualKpisTotal, 0);
+
+  useEffect(() => {
+    function closeExportMenuOnOutsideClick(event) {
+      if (!exportMenuRef.current?.open) return;
+      if (event.target instanceof Element && exportMenuRef.current.contains(event.target)) return;
+      exportMenuRef.current.removeAttribute("open");
+    }
+
+    function closeExportMenuOnEscape(event) {
+      if (event.key !== "Escape") return;
+      if (!exportMenuRef.current?.open) return;
+      exportMenuRef.current.removeAttribute("open");
+    }
+
+    document.addEventListener("mousedown", closeExportMenuOnOutsideClick);
+    document.addEventListener("keydown", closeExportMenuOnEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", closeExportMenuOnOutsideClick);
+      document.removeEventListener("keydown", closeExportMenuOnEscape);
+    };
+  }, []);
 
   async function handleExportPdf() {
     await exportDashboardPdf({
@@ -69,7 +93,7 @@ export default function App() {
 
         <div className="hero-controls">
           <div className="hero-controls-top">
-            <details className="export-menu">
+            <details ref={exportMenuRef} className="export-menu">
               <summary title="Exportacoes" aria-label="Exportacoes">
                 ⁝
               </summary>

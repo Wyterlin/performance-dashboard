@@ -7,6 +7,12 @@ function toIsoDate(date) {
   return date.toISOString().slice(0, 10);
 }
 
+function isIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return false;
+  const parsed = new Date(`${value}T00:00:00`);
+  return !Number.isNaN(parsed.getTime());
+}
+
 function getDefaultDateRange() {
   const now = new Date();
   const day = now.getDay() || 7;
@@ -27,6 +33,7 @@ function getStoredDateRange() {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed?.startDate || !parsed?.endDate) return null;
+    if (!isIsoDate(parsed.startDate) || !isIsoDate(parsed.endDate)) return null;
     return {
       startDate: String(parsed.startDate),
       endDate: String(parsed.endDate),

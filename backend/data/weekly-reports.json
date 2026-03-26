@@ -47,6 +47,12 @@
               "title": "UPDATES",
               "activity": "Inativação de alguns UPDATES e reutilizados em Consulta de Tela nos documentos de Marketing no SAP.",
               "highlight": "Nem todos os UPDATES foram inativados."
+            },
+            {
+              "id": "087b1564-a387-4731-a2e2-614a9fcda07b",
+              "title": "Otimização da TransactionNotification",
+              "activity": "Aperfeiçoando a escrita das consultas, condições, descrição dos bloqueios e comentários.",
+              "highlight": "Tempo atual\n\n1s.50mls para bloquear\n1s.60mls para alterar a Transaction\n\nTempo anterior\n\n3s.70mls para bloquear\n50seg para alterar a Transaction\n\n* Somente modificado o documento de NF de Saída"
             }
           ]
         },
@@ -59,7 +65,7 @@
           "activities": []
         }
       ],
-      "updatedAt": "2026-03-25T20:21:35.908Z",
+      "updatedAt": "2026-03-26T23:39:35.339Z",
       "createdAt": "2026-03-25T14:14:34.805Z"
     },
     {

@@ -32,6 +32,29 @@ function safeText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+function preserveMultiline(value) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .trim();
+}
+
+function splitPdfTextPreserveBreaks(doc, value, maxWidth) {
+  const normalized = preserveMultiline(value);
+  if (!normalized) return [];
+
+  const paragraphs = normalized.split("\n");
+  const lines = [];
+
+  paragraphs.forEach((paragraph, index) => {
+    const wrapped = doc.splitTextToSize(paragraph || " ", maxWidth);
+    lines.push(...wrapped);
+    if (index < paragraphs.length - 1) lines.push("");
+  });
+
+  return lines;
+}
+
 function normalizeText(value) {
   return safeText(value)
     .normalize("NFD")
@@ -449,12 +472,14 @@ export async function exportDashboardPdf({
 
     for (const activity of activities) {
       const title = safeText(activity?.title) || "Atividade";
-      const description = safeText(activity?.activity) || "Sem descricao.";
-      const highlight = safeText(activity?.highlight);
+      const description = preserveMultiline(activity?.activity) || "Sem descricao.";
+      const highlight = preserveMultiline(activity?.highlight);
 
       const titleLines = doc.splitTextToSize(title, maxWidth - 44);
-      const descLines = doc.splitTextToSize(description, maxWidth - 44);
-      const highlightLines = highlight ? doc.splitTextToSize(`Destaque: ${highlight}`, maxWidth - 44) : [];
+      const descLines = splitPdfTextPreserveBreaks(doc, description, maxWidth - 44);
+      const highlightLines = highlight
+        ? splitPdfTextPreserveBreaks(doc, `Destaque: ${highlight}`, maxWidth - 44)
+        : [];
       const blockHeight =
         18 +
         titleLines.length * 11 +
@@ -491,9 +516,9 @@ export async function exportDashboardPdf({
   // CAPITULO: RESUMO FINAL
   startChapter("Resumo final", "Consolidado narrativo do periodo");
 
-  const summarySafe = safeText(summaryText);
+  const summarySafe = preserveMultiline(summaryText);
   if (summarySafe) {
-    const summaryLines = doc.splitTextToSize(summarySafe, maxWidth - 24);
+    const summaryLines = splitPdfTextPreserveBreaks(doc, summarySafe, maxWidth - 24);
     const summaryHeight = 34 + summaryLines.length * 11;
     ensureSpace(summaryHeight + 8);
 
@@ -1124,8 +1149,8 @@ export async function exportDashboardPptx({
           line: { color: "D6E1EA", pt: 1 },
         });
         const title = safeText(activity?.title) || "Atividade";
-        const description = safeText(activity?.activity) || "Sem descricao.";
-        const highlight = safeText(activity?.highlight);
+        const description = preserveMultiline(activity?.activity) || "Sem descricao.";
+        const highlight = preserveMultiline(activity?.highlight);
         slide.addText(title, {
           x: 0.95,
           y: yCursor + 0.12,
@@ -1214,7 +1239,7 @@ export async function exportDashboardPptx({
     });
   });
 
-  const summarySafe = safeText(summaryText);
+  const summarySafe = preserveMultiline(summaryText);
   if (summarySafe) {
     closing.addShape(pptx.ShapeType.roundRect, {
       x: 0.7,

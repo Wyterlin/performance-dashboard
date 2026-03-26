@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const TITLE_MAX = 120;
@@ -16,6 +16,8 @@ export default function SectionActivities({
   onDelete,
   onMove,
 }) {
+  const sectionRef = useRef(null);
+  const deleteBackdropDownRef = useRef(false);
   const [showComposer, setShowComposer] = useState(false);
   const [draft, setDraft] = useState({ title: "", activity: "", highlight: "", position: 1 });
   const [editingActivityId, setEditingActivityId] = useState(null);
@@ -77,8 +79,61 @@ export default function SectionActivities({
     }
   }
 
+  function handleComposerKeyDown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      handleCancel();
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      handleAdd();
+    }
+  }
+
+  useEffect(() => {
+    if (!activeMenuId) return;
+
+    function handleOutsideMenuClick(event) {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest(".item-menu")) return;
+      setActiveMenuId(null);
+    }
+
+    document.addEventListener("mousedown", handleOutsideMenuClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideMenuClick);
+    };
+  }, [activeMenuId]);
+
+  useEffect(() => {
+    function handleEscClose(event) {
+      if (event.key !== "Escape") return;
+      if (showComposer) {
+        handleCancel();
+        return;
+      }
+      if (deletingActivity) {
+        setDeletingActivity(null);
+        return;
+      }
+      if (activeMenuId) {
+        setActiveMenuId(null);
+      }
+    }
+
+    document.addEventListener("keydown", handleEscClose);
+    return () => {
+      document.removeEventListener("keydown", handleEscClose);
+    };
+  }, [activeMenuId, deletingActivity, showComposer]);
+
   return (
-    <section className={`manual-section ${activeMenuId ? "manual-section-menu-open" : ""}`}>
+    <section
+      ref={sectionRef}
+      className={`manual-section ${activeMenuId ? "manual-section-menu-open" : ""}`}
+    >
       <header className="manual-section-header">
         <div>
           <h2>{section.name}</h2>
@@ -174,8 +229,12 @@ export default function SectionActivities({
 
       {showComposer
         ? createPortal(
-            <div className="activity-modal-backdrop" onClick={handleCancel}>
-              <div className="activity-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="activity-modal-backdrop">
+              <div
+                className="activity-modal"
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={handleComposerKeyDown}
+              >
                 <h3>
                   {editingActivityId
                     ? `Editar atividade em ${section.name}`
@@ -253,7 +312,17 @@ export default function SectionActivities({
 
       {deletingActivity
         ? createPortal(
-            <div className="activity-modal-backdrop" onClick={() => setDeletingActivity(null)}>
+            <div
+              className="activity-modal-backdrop"
+              onMouseDown={(event) => {
+                deleteBackdropDownRef.current = event.target === event.currentTarget;
+              }}
+              onClick={(event) => {
+                const shouldClose = deleteBackdropDownRef.current && event.target === event.currentTarget;
+                deleteBackdropDownRef.current = false;
+                if (shouldClose) setDeletingActivity(null);
+              }}
+            >
               <div className="activity-modal delete-modal" onClick={(event) => event.stopPropagation()}>
                 <h3>Confirmar exclusao</h3>
                 <p className="delete-warning">

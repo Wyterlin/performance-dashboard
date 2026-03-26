@@ -544,6 +544,7 @@ h1 {
   font-size: 0.9rem;
   background: rgba(0, 160, 223, 0.11);
   border: 1px solid rgba(0, 112, 192, 0.22);
+  white-space: pre-wrap;
 }
 
 label {
