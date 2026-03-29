@@ -82,3 +82,14 @@ Situacoes exibidas em cards:
 - `GET /api/weeks/:weekCode`
 - `PUT /api/weeks/:weekCode`
 - `GET /api/tickets/summary`
+
+## Checklist rapido de regressao
+
+1. Criar, editar, duplicar, mover e apagar atividade em diferentes secoes.
+2. Validar campo Chamado: aceitar apenas numeros e exigir 4 a 20 digitos quando preenchido.
+3. Confirmar atalhos: `Ctrl+Enter`, `Ctrl+S`, `Esc` (modal) e `Ctrl+N` (abrir novo item com foco na secao).
+4. Alternar tema claro/escuro e recarregar pagina para validar persistencia.
+5. Conferir indicador de autosave (`salvando`, `salvo`, `erro`).
+6. Testar filtro de atividades por titulo, descricao, destaque e chamado.
+7. Exportar PDF com e sem resumo; validar acentuacao, bloco de chamado e layout.
+8. Exportar PPTX com textos curtos e longos; validar que os cards crescem dinamicamente e nao cortam conteudo.

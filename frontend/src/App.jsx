@@ -1,29 +1,48 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import SectionActivities from "./components/SectionActivities";
 import TicketSummaryCard from "./components/TicketSummaryCard";
 import { useWeeklyReport } from "./hooks/useWeeklyReport";
 import { exportDashboardPdf, exportDashboardPptx } from "./services/exportService";
 
-const SUMMARY_MAX = 3000;
+const ONBOARDING_STORAGE_KEY = "performance-dashboard:onboarding-seen";
+
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
 
 export default function App() {
   const exportMenuRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSectionFilter, setSelectedSectionFilter] = useState("all");
+  const [roadmapSearchQuery, setRoadmapSearchQuery] = useState("");
+  const [roadmapCategoryFilter, setRoadmapCategoryFilter] = useState("all");
+  const [roadmapDifficultyFilter, setRoadmapDifficultyFilter] = useState("all");
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const {
     startDate,
     setStartDate,
     endDate,
     setEndDate,
     sections,
-    summaryText,
-    setSummaryText,
     ticketSummary,
     ticketLoading,
     ticketError,
     loadPeriodData,
     loadingReport,
+    autoSaveState,
+    lastAutoSavedAt,
+    theme,
+    toggleTheme,
+    dataQuality,
+    activityHistory,
     upsertActivity,
     deleteActivity,
     moveActivity,
+    duplicateActivity,
     isRangeInvalid,
   } = useWeeklyReport();
 
@@ -37,6 +56,25 @@ export default function App() {
   const operationalTotal = Number(ticketSummary?.total || 0);
   const repactTotal = Math.max(Number(ticketSummary?.totalCombined || 0) - operationalTotal, 0);
   const highlightedKpiTotal = Math.max(operationalTotal + manualKpisTotal, 0);
+  const sectionsWithIndex = sections.map((section, index) => ({ section, index }));
+  const roadmapEntry = sectionsWithIndex.find(({ section }) => normalizeText(section.name).includes("roadmap"));
+  const nonRoadmapEntries = sectionsWithIndex.filter(
+    ({ section }) => !normalizeText(section.name).includes("roadmap")
+  );
+  const filteredNonRoadmapEntries = nonRoadmapEntries.filter(({ section }) =>
+    selectedSectionFilter === "all" ? true : section.name === selectedSectionFilter
+  );
+
+  const autoSaveLabel =
+    autoSaveState === "saving"
+      ? "Salvando automaticamente..."
+      : autoSaveState === "saved"
+        ? `Salvo automaticamente${
+            lastAutoSavedAt ? ` às ${new Date(lastAutoSavedAt).toLocaleTimeString("pt-BR")}` : ""
+          }`
+        : autoSaveState === "error"
+          ? "Falha no autosave (tentando novamente)"
+          : "Autosave ativo";
 
   useEffect(() => {
     function closeExportMenuOnOutsideClick(event) {
@@ -60,13 +98,30 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    try {
+      const alreadySeen = window.localStorage.getItem(ONBOARDING_STORAGE_KEY) === "1";
+      if (!alreadySeen) setShowOnboarding(true);
+    } catch {
+      setShowOnboarding(true);
+    }
+  }, []);
+
+  function handleCloseOnboarding() {
+    try {
+      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
+    } catch {
+      // Ignore browser storage failures.
+    }
+    setShowOnboarding(false);
+  }
+
   async function handleExportPdf() {
     await exportDashboardPdf({
       startDate,
       endDate,
       ticketSummary,
       sections,
-      summaryText,
     });
   }
 
@@ -76,8 +131,12 @@ export default function App() {
       endDate,
       ticketSummary,
       sections,
-      summaryText,
     });
+  }
+
+  function handleOpenHistory() {
+    exportMenuRef.current?.removeAttribute("open");
+    setShowHistoryModal(true);
   }
 
   return (
@@ -93,6 +152,14 @@ export default function App() {
 
         <div className="hero-controls">
           <div className="hero-controls-top">
+            <button
+              type="button"
+              className="secondary-button theme-toggle"
+              onClick={toggleTheme}
+              aria-label="Alternar tema claro e escuro"
+            >
+              {theme === "dark" ? "Tema claro" : "Tema escuro"}
+            </button>
             <details ref={exportMenuRef} className="export-menu">
               <summary title="Exportacoes" aria-label="Exportacoes">
                 ⁝
@@ -103,6 +170,9 @@ export default function App() {
                 </button>
                 <button type="button" className="secondary-button" onClick={handleExportPptx}>
                   Exportar PowerPoint
+                </button>
+                <button type="button" className="secondary-button" onClick={handleOpenHistory}>
+                  Log de Modificações
                 </button>
               </div>
             </details>
@@ -136,6 +206,8 @@ export default function App() {
               {ticketLoading || loadingReport ? "Buscando..." : "Buscar Periodo"}
             </button>
           </div>
+
+          <p className={`autosave-pill autosave-${autoSaveState}`}>{autoSaveLabel}</p>
         </div>
       </section>
 
@@ -153,6 +225,12 @@ export default function App() {
         <article className="kpi-item">
           <span>Total de Chamados com Repactuacao de Prazos</span>
           <strong>{repactTotal}</strong>
+        </article>
+
+        <article className="kpi-item kpi-item-manual">
+          <span className="kpi-manual-label">Atividades sem chamado</span>
+          <span className="kpi-manual-section">Pendentes de vinculação</span>
+          <strong>{dataQuality.withoutCalled}</strong>
         </article>
 
         {sectionKpis.map((kpi) => (
@@ -173,30 +251,206 @@ export default function App() {
         />
       </section>
 
+      <section className="search-filter-section">
+        <div className="search-filter-block">
+          <label className="search-filter-field">
+            Filtrar Atividades
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Buscar por título, atividade, chamado ou destaque"
+            />
+          </label>
+
+          <label className="search-filter-field roadmap-category-field">
+            Filtrar Seção
+            <select
+              value={selectedSectionFilter}
+              onChange={(event) => setSelectedSectionFilter(event.target.value)}
+            >
+              <option value="all">Todas as seções</option>
+              {nonRoadmapEntries.map(({ section }) => (
+                <option key={section.name} value={section.name}>
+                  {section.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </section>
+
       <section className="sections-layout">
-        {sections.map((section, sectionIndex) => (
+        {filteredNonRoadmapEntries.map(({ section, index }) => (
           <SectionActivities
             key={section.name}
             section={section}
-            sectionIndex={sectionIndex}
+            sectionIndex={index}
             onUpsert={upsertActivity}
             onDelete={deleteActivity}
             onMove={moveActivity}
+            onDuplicate={duplicateActivity}
+            searchTerm={searchQuery}
+            roadmapCategoryFilter="all"
+            roadmapDifficultyFilter="all"
           />
         ))}
+
+        {roadmapEntry ? (
+          <section className="search-filter-section search-filter-section-roadmap">
+            <div className="search-filter-block search-filter-block-roadmap">
+              <label className="search-filter-field">
+                Filtrar Roadmap
+                <input
+                  type="search"
+                  value={roadmapSearchQuery}
+                  onChange={(event) => setRoadmapSearchQuery(event.target.value)}
+                  placeholder="Buscar por título, subtítulo, impacto ou categoria"
+                />
+              </label>
+
+              <label className="search-filter-field roadmap-category-field">
+                Filtrar Categoria
+                <select
+                  value={roadmapCategoryFilter}
+                  onChange={(event) => setRoadmapCategoryFilter(event.target.value)}
+                >
+                  <option value="all">Todas</option>
+                  <option value="Infraestrutura">Infraestrutura</option>
+                  <option value="Dados">Dados</option>
+                  <option value="Processos">Processos</option>
+                </select>
+              </label>
+
+              <label className="search-filter-field roadmap-difficulty-field">
+                Filtrar Dificuldade
+                <select
+                  value={roadmapDifficultyFilter}
+                  onChange={(event) => setRoadmapDifficultyFilter(event.target.value)}
+                >
+                  <option value="all">Todas</option>
+                  <option value="low">Baixa</option>
+                  <option value="medium">Média</option>
+                  <option value="high">Alta</option>
+                </select>
+              </label>
+            </div>
+          </section>
+        ) : null}
+
+        {roadmapEntry ? (
+          <SectionActivities
+            key={roadmapEntry.section.name}
+            section={roadmapEntry.section}
+            sectionIndex={roadmapEntry.index}
+            onUpsert={upsertActivity}
+            onDelete={deleteActivity}
+            onMove={moveActivity}
+            onDuplicate={duplicateActivity}
+            searchTerm={roadmapSearchQuery}
+            roadmapCategoryFilter={roadmapCategoryFilter}
+            roadmapDifficultyFilter={roadmapDifficultyFilter}
+          />
+        ) : null}
       </section>
 
-      <section className="summary-panel">
-        <h2>Resumo do Periodo</h2>
-        <textarea
-          rows="6"
-          value={summaryText}
-          maxLength={SUMMARY_MAX}
-          onChange={(event) => setSummaryText(event.target.value.slice(0, SUMMARY_MAX))}
-          placeholder="Sintese da semana, resultados, riscos, pendencias e foco para proxima semana..."
-        />
-        <small>{summaryText.length}/{SUMMARY_MAX}</small>
-      </section>
+      <footer className="site-footer" aria-label="Rodapé do site">
+        <div className="site-footer-grid">
+          <section className="footer-about">
+            <h3>{"</> ChristianW$"}</h3>
+            <p>Conectando código, café e criatividade.</p>
+          </section>
+
+          <section className="footer-column">
+            <h4>Recursos</h4>
+            <ul>
+              <li>
+                <a
+                  href="https://github.com/Wyterlin/my-website?tab=readme-ov-file#my-website"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Documentação
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/Wyterlin?tab=repositories"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Repositórios
+                </a>
+              </li>
+              <li>
+                <a href="https://dev.to/silveira" target="_blank" rel="noreferrer">
+                  Blog Dev
+                </a>
+              </li>
+            </ul>
+          </section>
+
+          <section className="footer-column">
+            <h4>Contato</h4>
+            <ul>
+              <li>
+                <a
+                  href="https://www.linkedin.com/in/christian-wyterlin-silveira"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Linkedin
+                </a>
+              </li>
+              <li>
+                <a href="https://github.com/Wyterlin" target="_blank" rel="noreferrer">
+                  GitHub
+                </a>
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        <p className="footer-bottom">ChristianW$ - Todos os direitos reservados.</p>
+      </footer>
+
+      {showOnboarding ? (
+        <section className="onboarding-overlay" role="dialog" aria-modal="true">
+          <article className="onboarding-card">
+            <h2>Bem-vindo ao Performance Dashboard</h2>
+            <p>Atalhos úteis: Ctrl+Enter/Ctrl+S para salvar, Esc para fechar, Ctrl+N para nova atividade.</p>
+            <p>Use o tema claro/escuro no topo e exporte em PDF ou PowerPoint pelo menu.</p>
+            <button type="button" onClick={handleCloseOnboarding}>Entendi</button>
+          </article>
+        </section>
+      ) : null}
+
+      {showHistoryModal ? (
+        <section className="history-overlay" role="dialog" aria-modal="true" aria-label="Histórico de atividades">
+          <article className="history-card">
+            <h2>Histórico Recente de Atividades</h2>
+            {activityHistory.length ? (
+              <ul className="history-list">
+                {activityHistory.slice(0, 25).map((entry) => (
+                  <li key={entry.id}>
+                    <strong>{entry.section}</strong>
+                    <span>
+                      {entry.type} - {entry.title} ({new Date(entry.timestamp).toLocaleString("pt-BR")})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="empty-activities">Ainda não há movimentações registradas.</p>
+            )}
+            <div className="composer-actions">
+              <button type="button" className="secondary-button" onClick={() => setShowHistoryModal(false)}>
+                Fechar
+              </button>
+            </div>
+          </article>
+        </section>
+      ) : null}
     </main>
   );
 }

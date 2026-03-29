@@ -14,23 +14,13 @@
               "id": "9e06795b-7f55-4df5-a729-67071e7cfce1",
               "title": "Cálculo de Comissão",
               "activity": "Correção do cálculo de comissão na coluna de Comissão nos Documentos de Marketing.",
-              "highlight": "",
-              "called": "",
-              "benefit": "Correção do cálculo de comissão na coluna de Comissão nos Documentos de Marketing.",
-              "difficulty": "",
-              "category": "",
-              "position": 1
+              "highlight": ""
             },
             {
               "id": "cae8d362-6e32-44ce-abb6-140fa6303372",
               "title": "Cálculo de Margem",
               "activity": "Manutenção nos cálculos e campos de Margem.",
-              "highlight": "Modificação da visualização do valor real no BD.",
-              "called": "",
-              "benefit": "Manutenção nos cálculos e campos de Margem.",
-              "difficulty": "",
-              "category": "",
-              "position": 2
+              "highlight": "Modificação da visualização do valor real no BD."
             }
           ]
         },
@@ -45,12 +35,7 @@
               "id": "d21b726e-8a55-4819-8994-1b5097aab283",
               "title": "Consulta do ICMS para Entrega",
               "activity": "Criação de consulta da tela de Entrega para emissão de nota fiscal pelo portal.",
-              "highlight": "Consulta solicitado por Marcelo Lopes",
-              "called": "",
-              "benefit": "Criação de consulta da tela de Entrega para emissão de nota fiscal pelo portal.",
-              "difficulty": "",
-              "category": "",
-              "position": 1
+              "highlight": "Consulta solicitado por Marcelo Lopes"
             }
           ]
         },
@@ -61,23 +46,13 @@
               "id": "7ef762b4-806f-49f4-8138-c469a17d6ac4",
               "title": "UPDATES",
               "activity": "Inativação de alguns UPDATES e reutilizados em Consulta de Tela nos documentos de Marketing no SAP.",
-              "highlight": "Nem todos os UPDATES foram inativados.",
-              "called": "",
-              "benefit": "Inativação de alguns UPDATES e reutilizados em Consulta de Tela nos documentos de Marketing no SAP.",
-              "difficulty": "",
-              "category": "",
-              "position": 1
+              "highlight": "Nem todos os UPDATES foram inativados."
             },
             {
               "id": "087b1564-a387-4731-a2e2-614a9fcda07b",
               "title": "Otimização da TransactionNotification",
               "activity": "Aperfeiçoando a escrita das consultas, condições, descrição dos bloqueios e comentários.",
-              "highlight": "Tempo atual\n\n1s.50mls para bloquear\n1s.60mls para alterar a Transaction\n\nTempo anterior\n\n3s.70mls para bloquear\n50seg para alterar a Transaction\n\n* Somente modificado o documento de NF de Saída",
-              "called": "",
-              "benefit": "Aperfeiçoando a escrita das consultas, condições, descrição dos bloqueios e comentários.",
-              "difficulty": "",
-              "category": "",
-              "position": 2
+              "highlight": "Tempo atual\n\n1s.50mls para bloquear\n1s.60mls para alterar a Transaction\n\nTempo anterior\n\n3s.70mls para bloquear\n50seg para alterar a Transaction\n\n* Somente modificado o documento de NF de Saída"
             }
           ]
         },
@@ -88,13 +63,9 @@
         {
           "name": "Treinamentos",
           "activities": []
-        },
-        {
-          "name": "Roadmap de Acoes e Melhoria Continua",
-          "activities": []
         }
       ],
-      "updatedAt": "2026-03-29T01:17:04.113Z",
+      "updatedAt": "2026-03-26T23:39:35.339Z",
       "createdAt": "2026-03-25T14:14:34.805Z"
     },
     {

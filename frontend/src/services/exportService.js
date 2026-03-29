@@ -13,7 +13,18 @@ const PPT_THEME = {
 };
 
 function formatPeriod(startDate, endDate) {
-  return `${startDate || "-"} ate ${endDate || "-"}`;
+  return `${startDate || "-"} até ${endDate || "-"}`;
+}
+
+function formatDateToBr(value) {
+  const raw = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw || "-";
+  const [year, month, day] = raw.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function formatPeriodPpt(startDate, endDate) {
+  return `${formatDateToBr(startDate)} até ${formatDateToBr(endDate)}`;
 }
 
 function statusRows(ticketSummary) {
@@ -55,6 +66,15 @@ function splitPdfTextPreserveBreaks(doc, value, maxWidth) {
   return lines;
 }
 
+function estimatePptLines(value, charsPerLine) {
+  const normalized = preserveMultiline(value);
+  if (!normalized) return 0;
+
+  return normalized
+    .split("\n")
+    .reduce((acc, line) => acc + Math.max(1, Math.ceil(String(line).length / charsPerLine)), 0);
+}
+
 function normalizeText(value) {
   return safeText(value)
     .normalize("NFD")
@@ -81,35 +101,35 @@ function buildDynamicPptNarrative(rows, operationalTotal, repactTotal, sectionKp
 
   const message =
     topValue > 0
-      ? `Maior concentracao da semana em ${topStatus} (${topValue}), com foco em estabilidade operacional e previsibilidade de entrega.`
-      : "Nao houve concentracao relevante por status no periodo analisado.";
+      ? `Maior concentração da semana em ${topStatus} (${topValue}), com foco em estabilidade operacional e previsibilidade de entrega.`
+      : "Não houve concentração relevante por status no período analisado.";
 
   const technicalRead =
     awaitingCount > resolvedCount
-      ? "Volume em aguardando acima de resolvidos/concluidos, indicando necessidade de destravar dependencias para acelerar o fluxo."
-      : "Resolvidos/concluidos acima de aguardando, sinalizando bom ritmo de encerramento e controle da fila.";
+      ? "Volume em aguardando acima de resolvidos/concluídos, indicando necessidade de destravar dependências para acelerar o fluxo."
+      : "Resolvidos/concluídos acima de aguardando, sinalizando bom ritmo de encerramento e controle da fila.";
 
   const closingBlocks = [
     {
       title: "Acoes imediatas (7 dias)",
       text:
         awaitingCount > 0
-          ? `Atuar nos ${awaitingCount} itens em aguardando com priorizacao por impacto e prazo.`
-          : "Manter cadencia de atendimento e monitoramento de novos chamados.",
+          ? `Atuar nos ${awaitingCount} itens em aguardando com priorização por impacto e prazo.`
+          : "Manter cadência de atendimento e monitoramento de novos chamados.",
     },
     {
       title: "Riscos monitorados",
       text:
         repactTotal > 0
-          ? `Repactuacao identificada em ${repactTotal} chamados, exigindo acompanhamento preventivo de SLA.`
-          : "Sem repactuacao no periodo, manter observabilidade para preservar tendencia.",
+          ? `Repactuação identificada em ${repactTotal} chamados, exigindo acompanhamento preventivo de SLA.`
+          : "Sem repactuação no período, manter observabilidade para preservar tendência.",
     },
     {
       title: "Ganhos esperados",
       text:
         manualTotal > 0
-          ? `Com ${manualTotal} atividades tecnicas registradas, expectativa de ganho continuo em eficiencia e qualidade de entrega.`
-          : "Consolidar rotina operacional com melhoria continua e foco em previsibilidade.",
+          ? `Com ${manualTotal} atividades técnicas registradas, expectativa de ganho contínuo em eficiência e qualidade de entrega.`
+          : "Consolidar rotina operacional com melhoria contínua e foco em previsibilidade.",
     },
   ];
 
@@ -154,6 +174,150 @@ function sortActivitiesByPosition(activities = []) {
   );
 }
 
+function truncateRoadmapText(value, maxLength = 35) {
+  const normalized = preserveMultiline(value);
+  if (!normalized) return "";
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+}
+
+function getActivityPptLayout(activity) {
+  const title = safeText(activity?.title) || "Atividade";
+  const description = preserveMultiline(activity?.activity) || "Sem descrição.";
+  const highlight = preserveMultiline(activity?.highlight);
+  const called = String(activity?.called || "").replace(/\D+/g, "");
+
+  const titleLines = estimatePptLines(title, called ? 52 : 72);
+  const descLines = estimatePptLines(description, 98);
+  const highlightLines = highlight ? estimatePptLines(`Destaque: ${highlight}`, 98) : 0;
+
+  const titleHeight = Math.max(0.2, titleLines * 0.16 + 0.04);
+  const descriptionHeight = Math.max(0.26, descLines * 0.14 + 0.05);
+  const highlightHeight = highlightLines ? Math.max(0.2, highlightLines * 0.13 + 0.04) : 0;
+
+  let yCursor = 0.12;
+  const titleY = yCursor;
+  yCursor += titleHeight + 0.07;
+
+  const descriptionY = yCursor;
+  yCursor += descriptionHeight;
+
+  let highlightY = 0;
+  if (highlightHeight > 0) {
+    yCursor += 0.06;
+    highlightY = yCursor;
+    yCursor += highlightHeight;
+  }
+
+  const height = Math.max(0.95, yCursor + 0.12);
+
+  return {
+    title,
+    description,
+    highlight,
+    called,
+    height,
+    titleY,
+    titleHeight,
+    descriptionY,
+    descriptionHeight,
+    highlightY,
+    highlightHeight,
+  };
+}
+
+function splitActivitiesForPpt(activities) {
+  const maxBottom = 6.75;
+  const startY = 1.15;
+  const gap = 0.12;
+  const pages = [];
+
+  let current = [];
+  let yCursor = startY;
+
+  activities.forEach((activity) => {
+    const layout = getActivityPptLayout(activity);
+    const neededBottom = yCursor + layout.height;
+
+    if (current.length > 0 && neededBottom > maxBottom) {
+      pages.push(current);
+      current = [{ activity, layout }];
+      yCursor = startY + layout.height + gap;
+      return;
+    }
+
+    current.push({ activity, layout });
+    yCursor += layout.height + gap;
+  });
+
+  if (current.length) pages.push(current);
+  return pages;
+}
+
+function isRoadmapSectionName(name) {
+  return safeText(name)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .includes("roadmap");
+}
+
+function roadmapDifficultyStyle(difficulty) {
+  const key = String(difficulty || "").toLowerCase();
+  if (key === "low") {
+    return {
+      label: "Baixa complexidade",
+      fill: "EEF7F1",
+      line: "8CBFA0",
+      text: "2D6A43",
+    };
+  }
+  if (key === "high") {
+    return {
+      label: "Alta complexidade",
+      fill: "F9EEF0",
+      line: "D79AA3",
+      text: "8D2F3B",
+    };
+  }
+  return {
+    label: "Média complexidade",
+    fill: "FFF6EA",
+    line: "E2BE82",
+    text: "8D640B",
+  };
+}
+
+function roadmapItemsFromSections(sections = []) {
+  const roadmapSection = sections.find((section) => isRoadmapSectionName(section?.name));
+  if (!roadmapSection) return [];
+
+  return sortActivitiesByPosition(roadmapSection.activities || []).map((item) => ({
+    title: truncateRoadmapText(safeText(item?.title) || "", 35),
+    subtitle: truncateRoadmapText(safeText(item?.subtitle) || "", 35),
+    impact: truncateRoadmapText(preserveMultiline(item?.impact || item?.benefit || item?.activity) || "", 180),
+    difficulty: String(item?.difficulty || "").toLowerCase(),
+    category: safeText(item?.category) || "",
+  }));
+}
+
+function addPptWatermark(slide, text) {
+  if (!text) return;
+  slide.addText(text, {
+    x: 2.0,
+    y: 3.0,
+    w: 8,
+    h: 0.5,
+    fontFace: "Segoe UI",
+    fontSize: 40,
+    bold: true,
+    color: "E5EBF1",
+    rotate: 330,
+    align: "center",
+    transparency: 65,
+  });
+}
+
 function hexToRgb(hex) {
   const raw = String(hex || "000000").replace("#", "");
   const normalized = raw.length === 3 ? raw.split("").map((c) => c + c).join("") : raw;
@@ -184,15 +348,16 @@ export async function exportDashboardPdf({
   endDate,
   ticketSummary,
   sections,
-  summaryText,
+  options = {},
 }) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const margin = 42;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const maxWidth = pageWidth - margin * 2;
+  const pdfMode = options.mode === "print" ? "print" : "standard";
   const periodText = formatPeriod(startDate, endDate);
-  const syncText = `Sincronizacao: SULTS API Service | ${formatSyncTimestamp()}`;
+  const syncText = `Sincronização: SULTS API Service | ${formatSyncTimestamp()}`;
   const sectionKpis = manualSectionKpis(sections);
   const rows = statusRows(ticketSummary);
   const orderedSections = (sections || []).map((section) => ({
@@ -206,6 +371,13 @@ export async function exportDashboardPdf({
   const consolidatedTotal = Math.max(operationalTotal + manualTotal, 0);
   const dynamic = buildDynamicPptNarrative(rows, operationalTotal, repactTotal, sectionKpis);
 
+  doc.setProperties({
+    title: `Performance Dashboard ${periodText}`,
+    subject: `Relatório semanal (${pdfMode})`,
+    author: "Performance Dashboard",
+    keywords: "dashboard, pdf, semanal, chamados",
+  });
+
   function drawFooterOnAllPages() {
     const totalPages = doc.getNumberOfPages();
     for (let page = 1; page <= totalPages; page += 1) {
@@ -214,7 +386,7 @@ export async function exportDashboardPdf({
       doc.setFontSize(8);
       setTextFromHex(doc, "7A8792");
       doc.text(syncText, margin, pageHeight - 18);
-      doc.text(`Pagina ${page}/${totalPages}`, pageWidth - margin, pageHeight - 18, { align: "right" });
+      doc.text(`Página ${page}/${totalPages}`, pageWidth - margin, pageHeight - 18, { align: "right" });
     }
   }
 
@@ -260,8 +432,8 @@ export async function exportDashboardPdf({
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(12);
-  doc.text("Relatorio executivo de operacoes e sustentacao", margin, 68);
-  doc.text(`Periodo analisado: ${periodText}`, margin, 94);
+  doc.text("Relatório executivo de operações e sustentação", margin, 68);
+  doc.text(`Período analisado: ${periodText}`, margin, 94);
 
   setFillFromHex(doc, "FFFFFF");
   setDrawFromHex(doc, "D6E1EA");
@@ -276,15 +448,14 @@ export async function exportDashboardPdf({
   doc.text(doc.splitTextToSize(dynamic.message, maxWidth - 28), margin + 14, 198);
 
   // SUMARIO (pagina dedicada)
-  startChapter("Sumario executivo", "Visao geral dos capitulos e secoes do relatorio");
+  startChapter("Sumário executivo", "Visão geral dos capítulos e seções do relatório");
 
   const chapterRows = [
-    { title: "Capa", detail: "Contexto e periodo analisado" },
-    { title: "Sumario executivo", detail: "Estrutura e distribuicao das secoes" },
-    { title: "Metricas estrategicas", detail: "KPI consolidado, operacionais e atividades" },
-    { title: "Painel de status (SULTS)", detail: "Distribuicao de volume e repactuacao por status" },
-    { title: "Atividades por secao", detail: "Detalhamento por tema" },
-    { title: "Resumo final", detail: "Sintese do periodo e direcionamentos" },
+    { title: "Capa", detail: "Contexto e período analisado" },
+    { title: "Sumário executivo", detail: "Estrutura e distribuição das seções" },
+    { title: "Métricas estratégicas", detail: "KPI consolidado, operacionais e atividades" },
+    { title: "Painel de status (SULTS)", detail: "Distribuição de volume e repactuação por status" },
+    { title: "Atividades por seção", detail: "Detalhamento por tema" },
   ];
 
   chapterRows.forEach((item) => {
@@ -307,7 +478,7 @@ export async function exportDashboardPdf({
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   setTextFromHex(doc, PPT_THEME.baseDark);
-  doc.text("Secoes monitoradas", margin, y + 12);
+  doc.text("Seções monitoradas", margin, y + 12);
   y += 20;
 
   orderedSections.forEach((section) => {
@@ -327,7 +498,7 @@ export async function exportDashboardPdf({
   });
 
   // CAPITULO: KPIs
-  startChapter("Metricas estrategicas", "Indicadores de desempenho consolidados");
+  startChapter("Métricas estratégicas", "Indicadores de desempenho consolidados");
 
   const kpiCards = [
     {
@@ -347,7 +518,7 @@ export async function exportDashboardPdf({
       valueColor: PPT_THEME.sapBlue,
     },
     {
-      labelLine1: "Chamados com repactuacao",
+      labelLine1: "Chamados com repactuação",
       labelLine2: "Impacto de prazo",
       value: repactTotal,
       fill: "FFF2E7",
@@ -396,7 +567,7 @@ export async function exportDashboardPdf({
   }
 
   // CAPITULO: STATUS
-  startChapter("Painel de status (SULTS)", "Volume principal e repactuacao por status");
+  startChapter("Painel de status (SULTS)", "Volume principal e repactuação por status");
 
   rows.forEach((row) => {
     ensureSpace(28);
@@ -413,7 +584,7 @@ export async function exportDashboardPdf({
     doc.text(`Volume: ${row.primary}`, margin + maxWidth - 180, y + 16);
     doc.setFont("helvetica", "normal");
     setTextFromHex(doc, PPT_THEME.textMuted);
-    doc.text(`Repactuacao: ${row.combined}`, margin + maxWidth - 88, y + 16);
+    doc.text(`Repactuação: ${row.combined}`, margin + maxWidth - 88, y + 16);
 
     y += 30;
   });
@@ -438,13 +609,13 @@ export async function exportDashboardPdf({
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   setTextFromHex(doc, PPT_THEME.baseDark);
-  doc.text("Destaque tecnico", margin + 12, y + 18);
+  doc.text("Destaque técnico", margin + 12, y + 18);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   setTextFromHex(doc, "4F5F6D");
   doc.text(doc.splitTextToSize(dynamic.technicalRead, maxWidth - 24), margin + 12, y + 34);
   // CAPITULO: ATIVIDADES
-  startChapter("Atividades por secao", "Detalhamento das entregas registradas");
+  startChapter("Atividades por seção", "Detalhamento das entregas registradas");
 
   for (const section of orderedSections) {
     const activities = section.activities;
@@ -472,17 +643,22 @@ export async function exportDashboardPdf({
 
     for (const activity of activities) {
       const title = safeText(activity?.title) || "Atividade";
-      const description = preserveMultiline(activity?.activity) || "Sem descricao.";
+      const description = preserveMultiline(activity?.activity) || "Sem descrição.";
       const highlight = preserveMultiline(activity?.highlight);
+      const called = String(activity?.called || "").replace(/\D+/g, "");
 
       const titleLines = doc.splitTextToSize(title, maxWidth - 44);
       const descLines = splitPdfTextPreserveBreaks(doc, description, maxWidth - 44);
+      const calledLines = called
+        ? splitPdfTextPreserveBreaks(doc, `Chamado: ${called}`, maxWidth - 44)
+        : [];
       const highlightLines = highlight
         ? splitPdfTextPreserveBreaks(doc, `Destaque: ${highlight}`, maxWidth - 44)
         : [];
       const blockHeight =
         18 +
         titleLines.length * 11 +
+        (calledLines.length ? calledLines.length * 10 + 4 : 0) +
         descLines.length * 11 +
         (highlightLines.length ? highlightLines.length * 10 + 6 : 0) +
         12;
@@ -498,6 +674,14 @@ export async function exportDashboardPdf({
       doc.text(titleLines, margin + 12, y + 16);
 
       let textY = y + 16 + titleLines.length * 11;
+      if (calledLines.length) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        setTextFromHex(doc, PPT_THEME.sapBlue);
+        doc.text(calledLines, margin + 12, textY + 1);
+        textY += calledLines.length * 10 + 4;
+      }
+
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       setTextFromHex(doc, "4F5F6D");
@@ -511,30 +695,6 @@ export async function exportDashboardPdf({
 
       y += blockHeight + 8;
     }
-  }
-
-  // CAPITULO: RESUMO FINAL
-  startChapter("Resumo final", "Consolidado narrativo do periodo");
-
-  const summarySafe = preserveMultiline(summaryText);
-  if (summarySafe) {
-    const summaryLines = splitPdfTextPreserveBreaks(doc, summarySafe, maxWidth - 24);
-    const summaryHeight = 34 + summaryLines.length * 11;
-    ensureSpace(summaryHeight + 8);
-
-    setFillFromHex(doc, "EAF3FB");
-    setDrawFromHex(doc, "CFE1EE");
-    doc.roundedRect(margin, y, maxWidth, summaryHeight, 8, 8, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    setTextFromHex(doc, PPT_THEME.baseDark);
-    doc.text("Resumo do periodo", margin + 12, y + 18);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    setTextFromHex(doc, "4F5F6D");
-    doc.text(summaryLines, margin + 12, y + 34);
-    y += summaryHeight + 10;
   }
 
   ensureSpace(104);
@@ -555,20 +715,48 @@ export async function exportDashboardPdf({
     y += 84;
   });
 
-  if (!summarySafe) {
-    ensureSpace(42);
-    setFillFromHex(doc, "FFFFFF");
-    setDrawFromHex(doc, "D6E1EA");
-    doc.roundedRect(margin, y, maxWidth, 34, 8, 8, "FD");
+  startChapter("Apêndice de dados", "Resumo bruto de status e atividades por seção");
+
+  ensureSpace(24);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  setTextFromHex(doc, PPT_THEME.baseDark);
+  doc.text("Status monitorados", margin, y + 12);
+  y += 20;
+
+  rows.forEach((row) => {
+    ensureSpace(22);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    setTextFromHex(doc, PPT_THEME.textMuted);
-    doc.text("Nenhum resumo manual foi informado para este periodo.", margin + 12, y + 21);
-  }
+    doc.setFontSize(9);
+    setTextFromHex(doc, "4F5F6D");
+    doc.text(
+      `${safeText(row.status)} | Volume: ${row.primary} | Repactuação: ${row.combined}`,
+      margin,
+      y + 12
+    );
+    y += 20;
+  });
+
+  ensureSpace(24);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  setTextFromHex(doc, PPT_THEME.baseDark);
+  doc.text("Atividades por seção", margin, y + 12);
+  y += 20;
+
+  orderedSections.forEach((section) => {
+    ensureSpace(22);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    setTextFromHex(doc, "4F5F6D");
+    doc.text(`${section.name}: ${section.activities.length}`, margin, y + 12);
+    y += 20;
+  });
 
   drawFooterOnAllPages();
 
-  doc.save(`performance-dashboard-${startDate || "inicio"}-${endDate || "fim"}.pdf`);
+  const pdfSuffix = pdfMode === "print" ? "-impressao" : "";
+  doc.save(`performance-dashboard-${startDate || "inicio"}-${endDate || "fim"}${pdfSuffix}.pdf`);
 }
 
 export async function exportDashboardPptx({
@@ -576,15 +764,18 @@ export async function exportDashboardPptx({
   endDate,
   ticketSummary,
   sections,
-  summaryText,
+  options = {},
 }) {
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
+  const pptMode = options.mode === "executive" ? "executive" : "operational";
+  const watermarkEnabled = Boolean(options.watermark);
+  const density = options.density === "compact" ? "compact" : "comfortable";
   pptx.author = "Performance Dashboard";
-  pptx.subject = "Relatorio semanal";
+  pptx.subject = "Relatório semanal";
   pptx.title = "Performance Dashboard";
-  const syncText = `Sincronizacao: SULTS API Service | ${formatSyncTimestamp()}`;
-  const periodText = formatPeriod(startDate, endDate);
+  const syncText = `Sincronização: SULTS API Service | ${formatSyncTimestamp()}`;
+  const periodText = formatPeriodPpt(startDate, endDate);
   const sectionKpis = manualSectionKpis(sections);
   const rows = statusRows(ticketSummary);
   const operationalTotal = Number(ticketSummary?.total || 0);
@@ -616,7 +807,7 @@ export async function exportDashboardPptx({
     bold: true,
     color: PPT_THEME.white,
   });
-  cover.addText("Apresentacao Executiva de Operacoes e Sustentacao", {
+  cover.addText("Apresentação Executiva de Operações e Sustentação", {
     x: 0.8,
     y: 2.2,
     w: 10.5,
@@ -625,7 +816,7 @@ export async function exportDashboardPptx({
     fontSize: 16,
     color: "DCEAF2",
   });
-  cover.addText(`Periodo analisado: ${periodText}`, {
+  cover.addText(`Período analisado: ${periodText}`, {
     x: 0.8,
     y: 2.8,
     w: 10.5,
@@ -634,11 +825,12 @@ export async function exportDashboardPptx({
     fontSize: 13,
     color: "BFDCEB",
   });
+  if (watermarkEnabled) addPptWatermark(cover, "CONFIDENCIAL");
   addStandardFooter(cover, syncText);
 
   const executiveSlide = pptx.addSlide();
   executiveSlide.background = { color: PPT_THEME.softBg };
-  executiveSlide.addText("Visao Geral do Ciclo de Vida", {
+  executiveSlide.addText("Visão Geral do Ciclo de Vida", {
     x: 0.7,
     y: 0.35,
     w: 6,
@@ -663,8 +855,8 @@ export async function exportDashboardPptx({
       color: "EAF3FB",
     },
     {
-      title: "Saida",
-      subtitle: "Resolvidos e concluidos no periodo",
+      title: "Saída",
+      subtitle: "Resolvidos e concluídos no período",
       value: sumStatusByTokens(rows, ["resolvido", "concluido"]),
       color: "EDF6ED",
     },
@@ -753,10 +945,11 @@ export async function exportDashboardPptx({
     }
   );
   addStandardFooter(executiveSlide, syncText);
+  if (watermarkEnabled) addPptWatermark(executiveSlide, "CONFIDENCIAL");
 
   const metricsSlide = pptx.addSlide();
   metricsSlide.background = { color: PPT_THEME.softBg };
-  metricsSlide.addText("Metricas Estrategicas", {
+  metricsSlide.addText("Métricas Estratégicas", {
     x: 0.7,
     y: 0.35,
     w: 6,
@@ -778,7 +971,7 @@ export async function exportDashboardPptx({
       valueColor: PPT_THEME.sapBlue,
     },
     {
-      label: "Total de Chamados com Repactuacao de Prazos",
+      label: "Total de Chamados com Repactuação de Prazos",
       sectionName: "",
       isManual: false,
       value: repactTotal,
@@ -865,10 +1058,11 @@ export async function exportDashboardPptx({
     });
   });
   addStandardFooter(metricsSlide, syncText);
+  if (watermarkEnabled) addPptWatermark(metricsSlide, "CONFIDENCIAL");
 
   const statusSlide = pptx.addSlide();
   statusSlide.background = { color: PPT_THEME.softBg };
-  statusSlide.addText("Analise de Status (SULTS)", {
+  statusSlide.addText("Análise de Status (SULTS)", {
     x: 0.7,
     y: 0.35,
     w: 7,
@@ -928,7 +1122,7 @@ export async function exportDashboardPptx({
     line: { color: "D6E1EA", pt: 1 },
   });
 
-  statusSlide.addText("Volume x Repactuacao", {
+  statusSlide.addText("Volume x Repactuação", {
     x: 8.35,
     y: 1.25,
     w: 3.3,
@@ -945,7 +1139,7 @@ export async function exportDashboardPptx({
     [
       {
         name: "Distribuicao",
-        labels: ["Volume Operacional", "Repactuacao"],
+        labels: ["Volume Operacional", "Repactuação"],
         values: donutSum > 0 ? donutValues : [1, 0],
       },
     ],
@@ -971,7 +1165,7 @@ export async function exportDashboardPptx({
     color: PPT_THEME.baseDark,
     align: "center",
   });
-  statusSlide.addText("eficiencia", {
+  statusSlide.addText("eficiência", {
     x: 9.32,
     y: 3.33,
     w: 1.4,
@@ -981,7 +1175,7 @@ export async function exportDashboardPptx({
     color: PPT_THEME.textMuted,
     align: "center",
   });
-  statusSlide.addText(`Volume Operacional: ${operationalTotal}\nRepactuacao: ${repactTotal}`, {
+  statusSlide.addText(`Volume Operacional: ${operationalTotal}\nRepactuação: ${repactTotal}`, {
     x: 8.45,
     y: 5.0,
     w: 3.1,
@@ -993,10 +1187,11 @@ export async function exportDashboardPptx({
     breakLine: true,
   });
   addStandardFooter(statusSlide, syncText);
+  if (watermarkEnabled) addPptWatermark(statusSlide, "CONFIDENCIAL");
 
   const technicalSlide = pptx.addSlide();
   technicalSlide.background = { color: PPT_THEME.softBg };
-  technicalSlide.addText("Destaque Tecnico", {
+  technicalSlide.addText("Destaque Técnico", {
     x: 0.7,
     y: 0.35,
     w: 6,
@@ -1015,7 +1210,7 @@ export async function exportDashboardPptx({
     fill: { color: "FFFFFF" },
     line: { color: "D6E1EA", pt: 1 },
   });
-  technicalSlide.addText("Leitura Tecnica da Semana", {
+  technicalSlide.addText("Leitura Técnica da Semana", {
     x: 0.95,
     y: 1.35,
     w: 4.5,
@@ -1059,10 +1254,10 @@ export async function exportDashboardPptx({
     color: PPT_THEME.baseDark,
   });
   const supportLines = [
-    `Periodo analisado: ${periodText}`,
+    `Período analisado: ${periodText}`,
     `Total de status monitorados: ${rows.length}`,
     `Atividades manuais registradas: ${dynamic.manualTotal}`,
-    `Chamados em destaque de atencao: ${dynamic.awaitingCount}`,
+    `Chamados em destaque de atenção: ${dynamic.awaitingCount}`,
   ];
   technicalSlide.addText(
     supportLines.map((line) => ({ text: line, options: { bullet: { indent: 14 } } })),
@@ -1078,105 +1273,139 @@ export async function exportDashboardPptx({
     }
   );
   addStandardFooter(technicalSlide, syncText);
+  if (watermarkEnabled) addPptWatermark(technicalSlide, "CONFIDENCIAL");
 
-  const populatedSections = (sections || []).filter((section) =>
-    Array.isArray(section.activities) && section.activities.length > 0
+  const populatedSections = (sections || []).filter(
+    (section) =>
+      !isRoadmapSectionName(section?.name) &&
+      Array.isArray(section.activities) &&
+      section.activities.length > 0
   );
 
-  for (const section of populatedSections) {
-    const activities = sortActivitiesByPosition(section.activities || []);
-    const itemsPerSlide = 5;
-    const totalSlides = Math.ceil(activities.length / itemsPerSlide);
+  if (pptMode === "operational") {
+    for (const section of populatedSections) {
+      const activities = sortActivitiesByPosition(section.activities || []);
+      const pages = splitActivitiesForPpt(activities);
+      const densityGap = density === "compact" ? 0.08 : 0.12;
 
-    for (let i = 0; i < totalSlides; i += 1) {
-      const start = i * itemsPerSlide;
-      const chunk = activities.slice(start, start + itemsPerSlide);
-      const slide = pptx.addSlide();
-      slide.background = { color: PPT_THEME.softBg };
+      pages.forEach((chunk, i) => {
+        const slide = pptx.addSlide();
+        slide.background = { color: PPT_THEME.softBg };
 
-      const sectionName = safeText(section.name) || "Secao";
-      const titleSuffix = totalSlides > 1 ? ` (${i + 1}/${totalSlides})` : "";
-      slide.addText(`${sectionName}${titleSuffix}`, {
-        x: 0.7,
-        y: 0.35,
-        w: 10.5,
-        h: 0.5,
-        fontFace: "Segoe UI",
-        fontSize: 23,
-        bold: true,
-        color: PPT_THEME.baseDark,
-      });
-      slide.addShape(pptx.ShapeType.roundRect, {
-        x: 10.1,
-        y: 0.35,
-        w: 1.8,
-        h: 0.6,
-        radius: 0.08,
-        fill: { color: "FFFFFF" },
-        line: { color: "D6E1EA", pt: 1 },
-      });
-      slide.addText(String(activities.length), {
-        x: 10.1,
-        y: 0.45,
-        w: 1.8,
-        h: 0.25,
-        fontFace: "Segoe UI",
-        fontSize: 18,
-        bold: true,
-        color: PPT_THEME.sapBlue,
-        align: "center",
-      });
-      slide.addText("atividades", {
-        x: 10.1,
-        y: 0.7,
-        w: 1.8,
-        h: 0.2,
-        fontFace: "Segoe UI",
-        fontSize: 8,
-        color: PPT_THEME.textMuted,
-        align: "center",
-      });
+        const sectionName = safeText(section.name) || "Secao";
+        const titleSuffix = pages.length > 1 ? ` (${i + 1}/${pages.length})` : "";
+        slide.addText(`${sectionName}${titleSuffix}`, {
+          x: 0.7,
+          y: 0.35,
+          w: 10.5,
+          h: 0.5,
+          fontFace: "Segoe UI",
+          fontSize: 23,
+          bold: true,
+          color: PPT_THEME.baseDark,
+        });
+        slide.addShape(pptx.ShapeType.roundRect, {
+          x: 10.1,
+          y: 0.35,
+          w: 1.8,
+          h: 0.6,
+          radius: 0.08,
+          fill: { color: "FFFFFF" },
+          line: { color: "D6E1EA", pt: 1 },
+        });
+        slide.addText(String(activities.length), {
+          x: 10.1,
+          y: 0.45,
+          w: 1.8,
+          h: 0.25,
+          fontFace: "Segoe UI",
+          fontSize: 18,
+          bold: true,
+          color: PPT_THEME.sapBlue,
+          align: "center",
+        });
+        slide.addText("atividades", {
+          x: 10.1,
+          y: 0.7,
+          w: 1.8,
+          h: 0.2,
+          fontFace: "Segoe UI",
+          fontSize: 8,
+          color: PPT_THEME.textMuted,
+          align: "center",
+        });
 
       let yCursor = 1.15;
-      chunk.forEach((activity) => {
+      chunk.forEach(({ layout }) => {
         slide.addShape(pptx.ShapeType.roundRect, {
           x: 0.7,
           y: yCursor,
           w: 11.2,
-          h: 1.0,
+          h: layout.height,
           radius: 0.05,
           fill: { color: "FFFFFF" },
           line: { color: "D6E1EA", pt: 1 },
         });
-        const title = safeText(activity?.title) || "Atividade";
-        const description = preserveMultiline(activity?.activity) || "Sem descricao.";
-        const highlight = preserveMultiline(activity?.highlight);
-        slide.addText(title, {
+
+        if (layout.called) {
+          slide.addShape(pptx.ShapeType.roundRect, {
+            x: 9.15,
+            y: yCursor + 0.1,
+            w: 2.4,
+            h: 0.45,
+            radius: 0.05,
+            fill: { color: "EAF3FB" },
+            line: { color: "CFE1EE", pt: 1 },
+          });
+          slide.addText("Chamado", {
+            x: 9.3,
+            y: yCursor + 0.14,
+            w: 2.1,
+            h: 0.1,
+            fontFace: "Segoe UI",
+            fontSize: 8,
+            bold: true,
+            color: PPT_THEME.textMuted,
+          });
+          slide.addText(layout.called, {
+            x: 9.3,
+            y: yCursor + 0.27,
+            w: 2.1,
+            h: 0.18,
+            fontFace: "Segoe UI",
+            fontSize: 10,
+            bold: true,
+            color: PPT_THEME.sapBlue,
+          });
+        }
+
+        slide.addText(layout.title, {
           x: 0.95,
-          y: yCursor + 0.12,
-          w: 7.8,
-          h: 0.2,
+          y: yCursor + layout.titleY,
+          w: layout.called ? 8 : 10.5,
+          h: layout.titleHeight,
           fontFace: "Segoe UI",
           fontSize: 12,
           bold: true,
           color: PPT_THEME.baseDark,
+          breakLine: true,
         });
-        slide.addText(description, {
+        slide.addText(layout.description, {
           x: 0.95,
-          y: yCursor + 0.36,
+          y: yCursor + layout.descriptionY,
           w: 10.5,
-          h: 0.28,
+          h: layout.descriptionHeight,
           fontFace: "Segoe UI",
           fontSize: 10,
           color: "4F5F6D",
           breakLine: true,
         });
-        if (highlight) {
-          slide.addText(`Destaque: ${highlight}`, {
+        if (layout.highlight) {
+          slide.addText(`Destaque: ${layout.highlight}`, {
             x: 0.95,
-            y: yCursor + 0.67,
+            y: yCursor + layout.highlightY,
             w: 10.5,
-            h: 0.24,
+            h: layout.highlightHeight,
             fontFace: "Segoe UI",
             fontSize: 9,
             color: PPT_THEME.attentionOrange,
@@ -1184,84 +1413,137 @@ export async function exportDashboardPptx({
             breakLine: true,
           });
         }
-        yCursor += 1.12;
+        yCursor += layout.height + densityGap;
       });
-      addStandardFooter(slide, syncText);
+        addStandardFooter(slide, syncText);
+        if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
+      });
     }
   }
 
-  const closing = pptx.addSlide();
-  closing.background = { color: PPT_THEME.softBg };
-  closing.addText("Proximos Passos / Melhoria Continua", {
-    x: 0.7,
-    y: 0.35,
-    w: 9,
-    h: 0.5,
-    fontFace: "Segoe UI",
-    fontSize: 24,
-    bold: true,
-    color: PPT_THEME.baseDark,
-  });
+  const roadmapItems = roadmapItemsFromSections(sections);
+  const roadmapItemsPerSlide = 6;
+  const roadmapSlides = Math.ceil(roadmapItems.length / roadmapItemsPerSlide);
 
-  const closingBlocks = dynamic.closingBlocks;
+  for (let slideIndex = 0; slideIndex < roadmapSlides; slideIndex += 1) {
+    const roadmapSlide = pptx.addSlide();
+    roadmapSlide.background = { color: PPT_THEME.softBg };
 
-  closingBlocks.forEach((block, index) => {
-    const x = 0.7 + index * 3.82;
-    closing.addShape(pptx.ShapeType.roundRect, {
-      x,
-      y: 1.2,
-      w: 3.6,
-      h: 4.7,
-      radius: 0.06,
+    roadmapSlide.addText("Roadmap de Ações e Melhoria Contínua", {
+      x: 0.7,
+      y: 0.35,
+      w: 10.5,
+      h: 0.5,
+      fontFace: "Segoe UI",
+      fontSize: 24,
+      bold: true,
+      color: PPT_THEME.baseDark,
+    });
+
+    roadmapSlide.addText("Visão macro de iniciativas priorizadas por esforço e impacto operacional.", {
+      x: 0.72,
+      y: 0.84,
+      w: 10.6,
+      h: 0.3,
+      fontFace: "Segoe UI",
+      fontSize: 10,
+      color: PPT_THEME.textMuted,
+    });
+
+    roadmapSlide.addShape(pptx.ShapeType.roundRect, {
+      x: 0.72,
+      y: 1.12,
+      w: 10.7,
+      h: 0.36,
+      radius: 0.05,
       fill: { color: "FFFFFF" },
       line: { color: "D6E1EA", pt: 1 },
     });
-    closing.addText(block.title, {
-      x: x + 0.2,
-      y: 1.45,
-      w: 3.2,
-      h: 0.6,
-      fontFace: "Segoe UI",
-      fontSize: 12,
-      bold: true,
-      color: PPT_THEME.sapBlue,
-      breakLine: true,
-    });
-    closing.addText(block.text, {
-      x: x + 0.2,
-      y: 2.15,
-      w: 3.2,
-      h: 3.3,
-      fontFace: "Segoe UI",
-      fontSize: 10,
-      color: "4F5F6D",
-      breakLine: true,
-    });
-  });
-
-  const summarySafe = preserveMultiline(summaryText);
-  if (summarySafe) {
-    closing.addShape(pptx.ShapeType.roundRect, {
-      x: 0.7,
-      y: 6.15,
-      w: 11.2,
-      h: 0.55,
-      radius: 0.05,
-      fill: { color: "EAF3FB" },
-      line: { color: "CFE1EE", pt: 1 },
-    });
-    closing.addText(summarySafe.slice(0, 220), {
-      x: 0.9,
-      y: 6.28,
-      w: 10.8,
-      h: 0.3,
+    roadmapSlide.addText("Legenda de dificuldade: Verde = Baixa | Amarelo = Média | Vermelho = Alta", {
+      x: 0.92,
+      y: 1.22,
+      w: 10.3,
+      h: 0.18,
       fontFace: "Segoe UI",
       fontSize: 9,
-      color: "4F5F6D",
-      breakLine: true,
+      color: PPT_THEME.textMuted,
+      align: "center",
     });
-  }
-  addStandardFooter(closing, syncText);
 
-  await pptx.writeFile({ fileName: `performance-dashboard-${startDate || "inicio"}-${endDate || "fim"}.pptx` });
+    const chunk = roadmapItems.slice(
+      slideIndex * roadmapItemsPerSlide,
+      slideIndex * roadmapItemsPerSlide + roadmapItemsPerSlide
+    );
+
+    chunk.forEach((item, index) => {
+        const row = Math.floor(index / 3);
+        const col = index % 3;
+        const cardX = 0.7 + col * 3.82;
+        const cardY = 1.6 + row * 2.55;
+        const style = roadmapDifficultyStyle(item.difficulty);
+
+        roadmapSlide.addShape(pptx.ShapeType.roundRect, {
+          x: cardX,
+          y: cardY,
+          w: 3.58,
+          h: 2.4,
+          radius: 0.06,
+          fill: { color: style.fill },
+          line: { color: style.line, pt: 1 },
+        });
+
+        roadmapSlide.addText(item.title, {
+          x: cardX + 0.18,
+          y: cardY + 0.16,
+          w: 3.2,
+          h: 0.5,
+          fontFace: "Segoe UI",
+          fontSize: 12,
+          bold: true,
+          color: style.text,
+          breakLine: true,
+        });
+
+        roadmapSlide.addText(item.subtitle, {
+          x: cardX + 0.18,
+          y: cardY + 0.66,
+          w: 3.2,
+          h: 0.35,
+          fontFace: "Segoe UI",
+          fontSize: 9,
+          bold: true,
+          color: style.text,
+          breakLine: true,
+        });
+
+        roadmapSlide.addText(item.impact, {
+          x: cardX + 0.18,
+          y: cardY + 1.05,
+          w: 3.2,
+          h: 0.95,
+          fontFace: "Segoe UI",
+          fontSize: 10,
+          color: style.text,
+          breakLine: true,
+        });
+
+        roadmapSlide.addText(item.category, {
+          x: cardX + 0.3,
+          y: cardY + 2.12,
+          w: 2.95,
+          h: 0.18,
+          fontFace: "Segoe UI",
+          fontSize: 8,
+          bold: true,
+          color: style.text,
+          align: "right",
+        });
+    });
+
+    addStandardFooter(roadmapSlide, syncText);
+    if (watermarkEnabled) addPptWatermark(roadmapSlide, "CONFIDENCIAL");
+  }
+
+  const modeSuffix = pptMode === "executive" ? "-executivo" : "-operacional";
+  await pptx.writeFile({ fileName: `performance-dashboard-${startDate || "inicio"}-${endDate || "fim"}${modeSuffix}.pptx` });
 }

@@ -2,11 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const TITLE_MAX = 120;
+const ROADMAP_TITLE_MAX = 35;
+const ROADMAP_SUBTITLE_MAX = 35;
 const ACTIVITY_MAX = 120;
 const HIGHLIGHT_MAX = 240;
+const ROADMAP_IMPACT_MAX = 180;
+const CALLED_MIN = 4;
+const CALLED_MAX = 20;
+const ENABLE_EXTRA_SHORTCUTS = true;
+
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
 
 function EmptyState() {
-  return <p className="empty-activities">Nenhuma atividade registrada para esta secao.</p>;
+  return <p className="empty-activities">Nenhuma atividade registrada para esta seção.</p>;
 }
 
 export default function SectionActivities({
@@ -15,29 +28,116 @@ export default function SectionActivities({
   onUpsert,
   onDelete,
   onMove,
+  onDuplicate,
+  searchTerm,
+  roadmapCategoryFilter,
+  roadmapDifficultyFilter,
 }) {
   const sectionRef = useRef(null);
   const deleteBackdropDownRef = useRef(false);
   const [showComposer, setShowComposer] = useState(false);
-  const [draft, setDraft] = useState({ title: "", activity: "", highlight: "", position: 1 });
+  const [draft, setDraft] = useState({
+    title: "",
+    activity: "",
+    highlight: "",
+    called: "",
+    subtitle: "",
+    impact: "",
+    difficulty: "medium",
+    category: "Processos",
+    position: 1,
+  });
   const [editingActivityId, setEditingActivityId] = useState(null);
   const [deletingActivity, setDeletingActivity] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const orderedActivities = [...(section.activities || [])].sort(
     (a, b) => Number(a.position || 0) - Number(b.position || 0)
   );
+  const isRoadmapSection = normalizeText(section.name).includes("roadmap");
+  const normalizedSearch = String(searchTerm || "").trim().toLowerCase();
+  const hasCategoryFilter = isRoadmapSection && String(roadmapCategoryFilter || "") !== "all";
+  const hasDifficultyFilter = isRoadmapSection && String(roadmapDifficultyFilter || "") !== "all";
+  const visibleActivities = normalizedSearch
+    ? orderedActivities.filter((item) => {
+        const haystack = `${item.title || ""} ${item.activity || ""} ${item.highlight || ""} ${
+          item.called || ""
+        } ${item.subtitle || ""} ${item.impact || item.benefit || ""} ${item.category || ""}`.toLowerCase();
+        const matchesText = haystack.includes(normalizedSearch);
+        const matchesCategory = !hasCategoryFilter || String(item.category || "") === roadmapCategoryFilter;
+        const matchesDifficulty =
+          !hasDifficultyFilter || String(item.difficulty || "") === roadmapDifficultyFilter;
+        return matchesText && matchesCategory && matchesDifficulty;
+      })
+    : orderedActivities.filter((item) => {
+        const matchesCategory = !hasCategoryFilter || String(item.category || "") === roadmapCategoryFilter;
+        const matchesDifficulty =
+          !hasDifficultyFilter || String(item.difficulty || "") === roadmapDifficultyFilter;
+        return matchesCategory && matchesDifficulty;
+      });
+
+  const difficultyLabel = {
+    low: "Baixa",
+    medium: "Média",
+    high: "Alta",
+  };
+
+  const difficultyClass = {
+    low: "difficulty-low",
+    medium: "difficulty-medium",
+    high: "difficulty-high",
+  };
+
+  const calledDigits = String(draft.called || "").replace(/\D+/g, "");
+  const calledTooShort = calledDigits.length > 0 && calledDigits.length < CALLED_MIN;
+  const calledTooLong = calledDigits.length > CALLED_MAX;
+  const calledInvalid = calledTooShort || calledTooLong;
 
   function updateDraft(field, value, maxLength) {
+    if (field === "called") {
+      const digits = String(value || "").replace(/\D+/g, "").slice(0, CALLED_MAX + 4);
+      setDraft((prev) => ({
+        ...prev,
+        called: digits,
+      }));
+      return;
+    }
+
+    const effectiveMaxLength =
+      isRoadmapSection && field === "title"
+        ? ROADMAP_TITLE_MAX
+        : isRoadmapSection && field === "subtitle"
+          ? ROADMAP_SUBTITLE_MAX
+          : isRoadmapSection && field === "impact"
+            ? ROADMAP_IMPACT_MAX
+          : maxLength;
+
     setDraft((prev) => ({
       ...prev,
-      [field]: String(value || "").slice(0, maxLength),
+      [field]: String(value || "").slice(0, effectiveMaxLength),
     }));
   }
 
   function handleAdd() {
-    const added = onUpsert(sectionIndex, draft, editingActivityId);
+    if (calledInvalid) return;
+    const payload = isRoadmapSection
+      ? {
+          ...draft,
+          activity: String(draft.activity || draft.impact || "").trim(),
+        }
+      : draft;
+    const added = onUpsert(sectionIndex, payload, editingActivityId);
     if (added) {
-      setDraft({ title: "", activity: "", highlight: "", position: 1 });
+      setDraft({
+        title: "",
+        activity: "",
+        highlight: "",
+        called: "",
+        subtitle: "",
+        impact: "",
+        difficulty: "medium",
+        category: "Processos",
+        position: 1,
+      });
       setEditingActivityId(null);
       setShowComposer(false);
       setActiveMenuId(null);
@@ -48,7 +148,17 @@ export default function SectionActivities({
     const nextPosition =
       (section.activities || []).reduce((acc, item) => Math.max(acc, Number(item.position || 0)), 0) + 1;
     setEditingActivityId(null);
-    setDraft({ title: "", activity: "", highlight: "", position: nextPosition });
+    setDraft({
+      title: "",
+      activity: "",
+      highlight: "",
+      called: "",
+      subtitle: "",
+      impact: "",
+      difficulty: "medium",
+      category: "Processos",
+      position: nextPosition,
+    });
     setShowComposer(true);
   }
 
@@ -59,13 +169,28 @@ export default function SectionActivities({
       title: String(item.title || ""),
       activity: String(item.activity || ""),
       highlight: String(item.highlight || ""),
+      called: String(item.called || ""),
+      subtitle: String(item.subtitle || ""),
+      impact: String(item.impact || item.benefit || item.activity || ""),
+      difficulty: String(item.difficulty || "medium"),
+      category: String(item.category || "Processos"),
       position: Number(item.position || 1),
     });
     setShowComposer(true);
   }
 
   function handleCancel() {
-    setDraft({ title: "", activity: "", highlight: "", position: 1 });
+    setDraft({
+      title: "",
+      activity: "",
+      highlight: "",
+      called: "",
+      subtitle: "",
+      impact: "",
+      difficulty: "medium",
+      category: "Processos",
+      position: 1,
+    });
     setEditingActivityId(null);
     setShowComposer(false);
   }
@@ -87,6 +212,15 @@ export default function SectionActivities({
     }
 
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      handleAdd();
+    }
+
+    if (
+      ENABLE_EXTRA_SHORTCUTS &&
+      (event.ctrlKey || event.metaKey) &&
+      String(event.key || "").toLowerCase() === "s"
+    ) {
       event.preventDefault();
       handleAdd();
     }
@@ -129,6 +263,26 @@ export default function SectionActivities({
     };
   }, [activeMenuId, deletingActivity, showComposer]);
 
+  useEffect(() => {
+    if (!ENABLE_EXTRA_SHORTCUTS) return;
+
+    function handleNewShortcut(event) {
+      if (showComposer) return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (String(event.key || "").toLowerCase() !== "n") return;
+      if (!(event.target instanceof Element)) return;
+      if (!sectionRef.current?.contains(event.target)) return;
+
+      event.preventDefault();
+      handleOpenComposer();
+    }
+
+    document.addEventListener("keydown", handleNewShortcut);
+    return () => {
+      document.removeEventListener("keydown", handleNewShortcut);
+    };
+  }, [showComposer, section.activities]);
+
   return (
     <section
       ref={sectionRef}
@@ -151,43 +305,45 @@ export default function SectionActivities({
 
       {section.activities.length ? (
         <ul className="activity-list">
-          {orderedActivities.map((item, index) => (
-            <li key={item.id} className="activity-item">
-              <div className="activity-item-header">
-                <h3>{item.title}</h3>
-                <div className="activity-item-tools">
-                  <div className="item-order-controls" aria-label={`Ordenacao da atividade ${item.title}`}>
-                    <button
-                      type="button"
-                      className="item-order-button"
-                      aria-label={`Mover para esquerda e subir prioridade da atividade ${item.title}`}
-                      disabled={index === 0}
-                      onClick={() => onMove(sectionIndex, item.id, -1)}
-                    >
-                      ←
-                    </button>
-                    <button
-                      type="button"
-                      className="item-order-button"
-                      aria-label={`Mover para direita e descer prioridade da atividade ${item.title}`}
-                      disabled={index === orderedActivities.length - 1}
-                      onClick={() => onMove(sectionIndex, item.id, 1)}
-                    >
-                      →
-                    </button>
-                  </div>
+          {visibleActivities.map((item) => {
+            const orderedIndex = orderedActivities.findIndex((activity) => activity.id === item.id);
+            return (
+              <li key={item.id} className="activity-item">
+                <div className="activity-item-header">
+                  <h3>{item.title}</h3>
+                  <div className="activity-item-tools">
+                    <div className="item-order-controls" aria-label={`Ordenação da atividade ${item.title}`}>
+                      <button
+                        type="button"
+                        className="item-order-button"
+                        aria-label={`Mover para esquerda e subir prioridade da atividade ${item.title}`}
+                        disabled={orderedIndex === 0}
+                        onClick={() => onMove(sectionIndex, item.id, -1)}
+                      >
+                        ←
+                      </button>
+                      <button
+                        type="button"
+                        className="item-order-button"
+                        aria-label={`Mover para direita e descer prioridade da atividade ${item.title}`}
+                        disabled={orderedIndex === orderedActivities.length - 1}
+                        onClick={() => onMove(sectionIndex, item.id, 1)}
+                      >
+                        →
+                      </button>
+                    </div>
 
-                  <div className="item-menu">
-                  <button
-                    type="button"
-                    className="item-menu-trigger"
-                    aria-label={`Acoes da atividade ${item.title}`}
-                    onClick={() =>
-                      setActiveMenuId((prev) => (prev === item.id ? null : item.id))
-                    }
-                  >
-                    ⁝
-                  </button>
+                    <div className="item-menu">
+                      <button
+                        type="button"
+                        className="item-menu-trigger"
+                        aria-label={`Ações da atividade ${item.title}`}
+                        onClick={() =>
+                          setActiveMenuId((prev) => (prev === item.id ? null : item.id))
+                        }
+                      >
+                        ⁝
+                      </button>
                     {activeMenuId === item.id ? (
                       <div className="item-menu-panel">
                         <button
@@ -202,6 +358,17 @@ export default function SectionActivities({
                         </button>
                         <button
                           type="button"
+                          className="secondary-button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            setActiveMenuId(null);
+                            onDuplicate(sectionIndex, item.id);
+                          }}
+                        >
+                          Duplicar
+                        </button>
+                        <button
+                          type="button"
                           className="danger-button"
                           onClick={(event) => {
                             event.preventDefault();
@@ -213,19 +380,37 @@ export default function SectionActivities({
                         </button>
                       </div>
                     ) : null}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <p className="activity-description">{item.activity}</p>
-              {item.highlight ? (
-                <p className="highlight-chip">Ponto(s) a Destacar: {item.highlight}</p>
-              ) : null}
-            </li>
-          ))}
+                {isRoadmapSection ? (
+                  <>
+                    <div className="roadmap-meta-row">
+                      <span className={`difficulty-chip ${difficultyClass[item.difficulty] || "difficulty-medium"}`}>
+                        Dificuldade: {difficultyLabel[item.difficulty] || "Média"}
+                      </span>
+                      {item.category ? <span className="category-chip">Categoria: {item.category}</span> : null}
+                    </div>
+                    {item.subtitle ? <p className="subtitle-chip">Subtítulo: {item.subtitle}</p> : null}
+                    {(item.impact || item.benefit) ? <p className="benefit-chip">Impacto: {item.impact || item.benefit}</p> : null}
+                  </>
+                ) : null}
+                {item.called ? <p className="called-chip">Chamado: {item.called}</p> : null}
+                <p className="activity-description">{item.activity}</p>
+                {item.highlight ? (
+                  <p className="highlight-chip">Ponto(s) a Destacar: {item.highlight}</p>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <EmptyState />
       )}
+
+      {section.activities.length && !visibleActivities.length ? (
+        <p className="empty-activities">Nenhuma atividade desta seção corresponde ao filtro atual.</p>
+      ) : null}
 
       {showComposer
         ? createPortal(
@@ -240,46 +425,128 @@ export default function SectionActivities({
                     ? `Editar atividade em ${section.name}`
                     : `Adicionar atividade em ${section.name}`}
                 </h3>
+                <small className="shortcut-hint">
+                  Ctrl+Enter salvar | Ctrl+S salvar | Esc cancelar
+                </small>
 
                 <div className="activity-modal-fields">
                   <label>
-                    Titulo
+                    Título
                     <input
                       value={draft.title}
-                      maxLength={TITLE_MAX}
+                      maxLength={isRoadmapSection ? ROADMAP_TITLE_MAX : TITLE_MAX}
                       onChange={(event) => updateDraft("title", event.target.value, TITLE_MAX)}
                       placeholder="Ex.: Correcao de erro"
                     />
-                    <small>{draft.title.length}/{TITLE_MAX}</small>
+                    <small>
+                      {draft.title.length}/{isRoadmapSection ? ROADMAP_TITLE_MAX : TITLE_MAX}
+                    </small>
                   </label>
 
-                  <label>
-                    Atividade
-                    <textarea
-                      rows="4"
-                      value={draft.activity}
-                      maxLength={ACTIVITY_MAX}
-                      onChange={(event) =>
-                        updateDraft("activity", event.target.value, ACTIVITY_MAX)
-                      }
-                      placeholder="Descreva o que foi feito"
-                    />
-                    <small>{draft.activity.length}/{ACTIVITY_MAX}</small>
-                  </label>
+                  {isRoadmapSection ? (
+                    <>
+                      <label>
+                        Subtítulo
+                        <textarea
+                          rows="2"
+                          value={draft.subtitle}
+                          maxLength={ROADMAP_SUBTITLE_MAX}
+                          onChange={(event) => updateDraft("subtitle", event.target.value, ROADMAP_SUBTITLE_MAX)}
+                          placeholder="Ex.: Otimização do fluxo de atendimento"
+                        />
+                        <small>{draft.subtitle.length}/{ROADMAP_SUBTITLE_MAX}</small>
+                      </label>
 
-                  <label>
-                    Ponto(s) a Destacar (opcional)
-                    <textarea
-                      rows="3"
-                      value={draft.highlight}
-                      maxLength={HIGHLIGHT_MAX}
-                      onChange={(event) =>
-                        updateDraft("highlight", event.target.value, HIGHLIGHT_MAX)
-                      }
-                      placeholder="Somente se houver"
-                    />
-                    <small>{draft.highlight.length}/{HIGHLIGHT_MAX}</small>
-                  </label>
+                      <label>
+                        Impacto
+                        <textarea
+                          rows="4"
+                          value={draft.impact}
+                          maxLength={ROADMAP_IMPACT_MAX}
+                          onChange={(event) => updateDraft("impact", event.target.value, ROADMAP_IMPACT_MAX)}
+                          placeholder="Ex.: Redução de 20% no tempo de processamento e aumento de previsibilidade"
+                        />
+                        <small>{draft.impact.length}/{ROADMAP_IMPACT_MAX}</small>
+                      </label>
+
+                      <div className="roadmap-input-grid">
+                        <label>
+                          Dificuldade
+                          <select
+                            value={draft.difficulty}
+                            onChange={(event) => setDraft((prev) => ({ ...prev, difficulty: event.target.value }))}
+                          >
+                            <option value="low">Baixa</option>
+                            <option value="medium">Média</option>
+                            <option value="high">Alta</option>
+                          </select>
+                        </label>
+
+                        <label>
+                          Categoria
+                          <select
+                            value={draft.category}
+                            onChange={(event) => setDraft((prev) => ({ ...prev, category: event.target.value }))}
+                          >
+                            <option value="Infraestrutura">Infraestrutura</option>
+                            <option value="Dados">Dados</option>
+                            <option value="Processos">Processos</option>
+                          </select>
+                        </label>
+                      </div>
+                    </>
+                  ) : null}
+
+                  {!isRoadmapSection ? (
+                    <label>
+                      Chamado (opcional, apenas números)
+                      <input
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={draft.called}
+                        onChange={(event) => updateDraft("called", event.target.value, CALLED_MAX)}
+                        placeholder="Ex.: 123456"
+                      />
+                      <small>{calledDigits.length}/{CALLED_MAX}</small>
+                      {calledInvalid ? (
+                        <small className="field-error">
+                          O chamado deve ter entre {CALLED_MIN} e {CALLED_MAX} dígitos.
+                        </small>
+                      ) : null}
+                    </label>
+                  ) : null}
+
+                  {!isRoadmapSection ? (
+                    <label>
+                      Atividade
+                      <textarea
+                        rows="4"
+                        value={draft.activity}
+                        maxLength={ACTIVITY_MAX}
+                        onChange={(event) =>
+                          updateDraft("activity", event.target.value, ACTIVITY_MAX)
+                        }
+                        placeholder="Descreva o que foi feito"
+                      />
+                      <small>{draft.activity.length}/{ACTIVITY_MAX}</small>
+                    </label>
+                  ) : null}
+
+                  {!isRoadmapSection ? (
+                    <label>
+                      Ponto(s) a Destacar (opcional)
+                      <textarea
+                        rows="3"
+                        value={draft.highlight}
+                        maxLength={HIGHLIGHT_MAX}
+                        onChange={(event) =>
+                          updateDraft("highlight", event.target.value, HIGHLIGHT_MAX)
+                        }
+                        placeholder="Somente se houver"
+                      />
+                      <small>{draft.highlight.length}/{HIGHLIGHT_MAX}</small>
+                    </label>
+                  ) : null}
                 </div>
 
                 <div className="activity-priority-row">
@@ -297,7 +564,7 @@ export default function SectionActivities({
                 </div>
 
                 <div className="composer-actions activity-modal-actions">
-                  <button type="button" onClick={handleAdd}>
+                  <button type="button" onClick={handleAdd} disabled={calledInvalid}>
                     Salvar
                   </button>
                   <button type="button" className="secondary-button" onClick={handleCancel}>
@@ -324,9 +591,9 @@ export default function SectionActivities({
               }}
             >
               <div className="activity-modal delete-modal" onClick={(event) => event.stopPropagation()}>
-                <h3>Confirmar exclusao</h3>
+                <h3>Confirmar exclusão</h3>
                 <p className="delete-warning">
-                  Esta acao removera permanentemente a atividade "{deletingActivity.title}".
+                  Esta ação removerá permanentemente a atividade "{deletingActivity.title}".
                 </p>
                 <div className="composer-actions activity-modal-actions">
                   <button type="button" className="secondary-button" onClick={() => setDeletingActivity(null)}>
