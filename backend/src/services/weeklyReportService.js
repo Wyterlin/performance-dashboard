@@ -13,6 +13,10 @@ const DEFAULT_SECTIONS = [
 
 const CALLED_MIN_DIGITS = 4;
 const CALLED_MAX_DIGITS = 20;
+const TEAM_MEMBER_MAX = 60;
+const TEAM_MEMBER_LIMIT = 10;
+const CYCLE_IMPLANTATION_MAX = 50;
+const CYCLE_TIME_MAX = 40;
 const ROADMAP_DIFFICULTY = new Set(["low", "medium", "high"]);
 const ROADMAP_CATEGORY = new Set(["Infraestrutura", "Dados", "Processos"]);
 
@@ -40,6 +44,31 @@ function isRoadmapSectionName(name) {
 
 function sanitizeBenefit(value) {
   return String(value || "").trim().slice(0, 180);
+}
+
+function sanitizeProjectTeam(value) {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+  const unique = new Set();
+
+  source.forEach((item) => {
+    const normalized = String(item || "").trim().slice(0, TEAM_MEMBER_MAX);
+    if (normalized) unique.add(normalized);
+  });
+
+  return [...unique].slice(0, TEAM_MEMBER_LIMIT);
+}
+
+function sanitizeCycleImplantation(value) {
+  return String(value || "").trim().slice(0, CYCLE_IMPLANTATION_MAX);
+}
+
+function sanitizeCycleTime(value) {
+  return String(value || "").trim().slice(0, CYCLE_TIME_MAX);
 }
 
 function sanitizeDifficulty(value) {
@@ -110,6 +139,9 @@ function normalizeSections(payload) {
         activity: String(activity.activity || "").trim(),
         highlight: String(activity.highlight || "").trim(),
         called: sanitizeCalled(activity.called),
+        projectTeam: sanitizeProjectTeam(activity.projectTeam),
+        cycleImplantation: sanitizeCycleImplantation(activity.cycleImplantation),
+        cycleTime: sanitizeCycleTime(activity.cycleTime),
         benefit: sanitizeBenefit(activity.benefit || activity.activity),
         difficulty: isRoadmapSectionName(section.name)
           ? sanitizeDifficulty(activity.difficulty) || "medium"

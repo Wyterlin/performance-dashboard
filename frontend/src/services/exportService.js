@@ -186,12 +186,20 @@ function getActivityPptLayout(activity) {
   const description = preserveMultiline(activity?.activity) || "Sem descrição.";
   const highlight = preserveMultiline(activity?.highlight);
   const called = String(activity?.called || "").replace(/\D+/g, "");
+  const cycleTime = safeText(activity?.cycleTime);
+  const projectTeam = Array.isArray(activity?.projectTeam)
+    ? activity.projectTeam.map((item) => safeText(item)).filter(Boolean).join(", ")
+    : "";
 
   const titleLines = estimatePptLines(title, called ? 52 : 72);
+  const cycleTimeLines = cycleTime ? estimatePptLines(`Tempo de Ciclo (Cycle Time): ${cycleTime}`, 98) : 0;
+  const projectTeamLines = projectTeam ? estimatePptLines(`Equipe do Projeto: ${projectTeam}`, 98) : 0;
   const descLines = estimatePptLines(description, 98);
-  const highlightLines = highlight ? estimatePptLines(`Destaque: ${highlight}`, 98) : 0;
+  const highlightLines = highlight ? estimatePptLines(`Pontos a Destacar: ${highlight}`, 98) : 0;
 
   const titleHeight = Math.max(0.2, titleLines * 0.16 + 0.04);
+  const cycleTimeHeight = cycleTimeLines ? Math.max(0.16, cycleTimeLines * 0.13 + 0.03) : 0;
+  const projectTeamHeight = projectTeamLines ? Math.max(0.16, projectTeamLines * 0.13 + 0.03) : 0;
   const descriptionHeight = Math.max(0.26, descLines * 0.14 + 0.05);
   const highlightHeight = highlightLines ? Math.max(0.2, highlightLines * 0.13 + 0.04) : 0;
 
@@ -201,6 +209,20 @@ function getActivityPptLayout(activity) {
 
   const descriptionY = yCursor;
   yCursor += descriptionHeight;
+
+  let cycleTimeY = 0;
+  if (cycleTimeHeight > 0) {
+    yCursor += 0.05;
+    cycleTimeY = yCursor;
+    yCursor += cycleTimeHeight;
+  }
+
+  let projectTeamY = 0;
+  if (projectTeamHeight > 0) {
+    yCursor += 0.05;
+    projectTeamY = yCursor;
+    yCursor += projectTeamHeight;
+  }
 
   let highlightY = 0;
   if (highlightHeight > 0) {
@@ -216,11 +238,17 @@ function getActivityPptLayout(activity) {
     description,
     highlight,
     called,
+    cycleTime,
+    projectTeam,
     height,
     titleY,
     titleHeight,
     descriptionY,
     descriptionHeight,
+    cycleTimeY,
+    cycleTimeHeight,
+    projectTeamY,
+    projectTeamHeight,
     highlightY,
     highlightHeight,
   };
@@ -296,6 +324,7 @@ function roadmapItemsFromSections(sections = []) {
     title: truncateRoadmapText(safeText(item?.title) || "", 35),
     subtitle: truncateRoadmapText(safeText(item?.subtitle) || "", 35),
     impact: truncateRoadmapText(preserveMultiline(item?.impact || item?.benefit || item?.activity) || "", 180),
+    cycleImplantation: truncateRoadmapText(safeText(item?.cycleImplantation) || "", 35),
     difficulty: String(item?.difficulty || "").toLowerCase(),
     category: safeText(item?.category) || "",
   }));
@@ -646,20 +675,37 @@ export async function exportDashboardPdf({
       const description = preserveMultiline(activity?.activity) || "Sem descrição.";
       const highlight = preserveMultiline(activity?.highlight);
       const called = String(activity?.called || "").replace(/\D+/g, "");
+      const cycleImplantation = safeText(activity?.cycleImplantation);
+      const cycleTime = safeText(activity?.cycleTime);
+      const projectTeam = Array.isArray(activity?.projectTeam)
+        ? activity.projectTeam.map((item) => safeText(item)).filter(Boolean).join(", ")
+        : "";
 
       const titleLines = doc.splitTextToSize(title, maxWidth - 44);
       const descLines = splitPdfTextPreserveBreaks(doc, description, maxWidth - 44);
       const calledLines = called
         ? splitPdfTextPreserveBreaks(doc, `Chamado: ${called}`, maxWidth - 44)
         : [];
+      const cycleTimeLines = cycleTime
+        ? splitPdfTextPreserveBreaks(doc, `Tempo de Ciclo (Cycle Time): ${cycleTime}`, maxWidth - 44)
+        : [];
+      const cycleImplantationLines = cycleImplantation
+        ? splitPdfTextPreserveBreaks(doc, `Ciclo de Implantação: ${cycleImplantation}`, maxWidth - 44)
+        : [];
+      const projectTeamLines = projectTeam
+        ? splitPdfTextPreserveBreaks(doc, `Equipe do Projeto: ${projectTeam}`, maxWidth - 44)
+        : [];
       const highlightLines = highlight
-        ? splitPdfTextPreserveBreaks(doc, `Destaque: ${highlight}`, maxWidth - 44)
+        ? splitPdfTextPreserveBreaks(doc, `Pontos a Destacar: ${highlight}`, maxWidth - 44)
         : [];
       const blockHeight =
         18 +
         titleLines.length * 11 +
         (calledLines.length ? calledLines.length * 10 + 4 : 0) +
         descLines.length * 11 +
+        (cycleTimeLines.length ? cycleTimeLines.length * 10 + 4 : 0) +
+        (cycleImplantationLines.length ? cycleImplantationLines.length * 10 + 4 : 0) +
+        (projectTeamLines.length ? projectTeamLines.length * 10 + 4 : 0) +
         (highlightLines.length ? highlightLines.length * 10 + 6 : 0) +
         12;
 
@@ -687,6 +733,30 @@ export async function exportDashboardPdf({
       setTextFromHex(doc, "4F5F6D");
       doc.text(descLines, margin + 12, textY);
       textY += descLines.length * 11;
+
+      if (cycleTimeLines.length) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        setTextFromHex(doc, PPT_THEME.baseDark);
+        doc.text(cycleTimeLines, margin + 12, textY + 4);
+        textY += cycleTimeLines.length * 10 + 4;
+      }
+
+      if (cycleImplantationLines.length) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        setTextFromHex(doc, PPT_THEME.baseDark);
+        doc.text(cycleImplantationLines, margin + 12, textY + 4);
+        textY += cycleImplantationLines.length * 10 + 4;
+      }
+
+      if (projectTeamLines.length) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        setTextFromHex(doc, PPT_THEME.sapBlue);
+        doc.text(projectTeamLines, margin + 12, textY + 4);
+        textY += projectTeamLines.length * 10 + 4;
+      }
 
       if (highlightLines.length) {
         setTextFromHex(doc, PPT_THEME.attentionOrange);
@@ -1400,8 +1470,33 @@ export async function exportDashboardPptx({
           color: "4F5F6D",
           breakLine: true,
         });
+        if (layout.cycleTime) {
+          slide.addText(`Tempo de Ciclo (Cycle Time): ${layout.cycleTime}`, {
+            x: 0.95,
+            y: yCursor + layout.cycleTimeY,
+            w: 10.5,
+            h: layout.cycleTimeHeight,
+            fontFace: "Segoe UI",
+            fontSize: 9,
+            color: PPT_THEME.baseDark,
+            breakLine: true,
+          });
+        }
+        if (layout.projectTeam) {
+          slide.addText(`Equipe do Projeto: ${layout.projectTeam}`, {
+            x: 0.95,
+            y: yCursor + layout.projectTeamY,
+            w: 10.5,
+            h: layout.projectTeamHeight,
+            fontFace: "Segoe UI",
+            fontSize: 9,
+            bold: true,
+            color: PPT_THEME.sapBlue,
+            breakLine: true,
+          });
+        }
         if (layout.highlight) {
-          slide.addText(`Destaque: ${layout.highlight}`, {
+          slide.addText(`Pontos a Destacar: ${layout.highlight}`, {
             x: 0.95,
             y: yCursor + layout.highlightY,
             w: 10.5,
@@ -1527,10 +1622,22 @@ export async function exportDashboardPptx({
           breakLine: true,
         });
 
+        roadmapSlide.addText(item.cycleImplantation ? `Ciclo de Implantação: ${item.cycleImplantation}` : "", {
+          x: cardX + 0.18,
+          y: cardY + 2.03,
+          w: 1.95,
+          h: 0.22,
+          fontFace: "Segoe UI",
+          fontSize: 8,
+          bold: true,
+          color: style.text,
+          align: "left",
+        });
+
         roadmapSlide.addText(item.category, {
-          x: cardX + 0.3,
+          x: cardX + 1.95,
           y: cardY + 2.12,
-          w: 2.95,
+          w: 1.45,
           h: 0.18,
           fontFace: "Segoe UI",
           fontSize: 8,

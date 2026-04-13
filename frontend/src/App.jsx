@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import SectionActivities from "./components/SectionActivities";
 import TicketSummaryCard from "./components/TicketSummaryCard";
 import { useWeeklyReport } from "./hooks/useWeeklyReport";
-import { exportDashboardPdf, exportDashboardPptx } from "./services/exportService";
 
 const ONBOARDING_STORAGE_KEY = "performance-dashboard:onboarding-seen";
 
@@ -117,6 +116,7 @@ export default function App() {
   }
 
   async function handleExportPdf() {
+    const { exportDashboardPdf } = await import("./services/exportService");
     await exportDashboardPdf({
       startDate,
       endDate,
@@ -126,6 +126,7 @@ export default function App() {
   }
 
   async function handleExportPptx() {
+    const { exportDashboardPptx } = await import("./services/exportService");
     await exportDashboardPptx({
       startDate,
       endDate,
@@ -259,7 +260,7 @@ export default function App() {
               type="search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Buscar por título, atividade, chamado ou destaque"
+              placeholder="Buscar por título, atividade, chamado ou pontos a destacar"
             />
           </label>
 

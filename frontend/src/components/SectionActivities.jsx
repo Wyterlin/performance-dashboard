@@ -6,6 +6,9 @@ const ROADMAP_TITLE_MAX = 35;
 const ROADMAP_SUBTITLE_MAX = 35;
 const ACTIVITY_MAX = 120;
 const HIGHLIGHT_MAX = 240;
+const PROJECT_TEAM_MAX = 220;
+const CYCLE_IMPLANTATION_MAX = 50;
+const CYCLE_TIME_MAX = 40;
 const ROADMAP_IMPACT_MAX = 180;
 const CALLED_MIN = 4;
 const CALLED_MAX = 20;
@@ -41,6 +44,9 @@ export default function SectionActivities({
     activity: "",
     highlight: "",
     called: "",
+    projectTeamInput: "",
+    cycleImplantation: "",
+    cycleTime: "",
     subtitle: "",
     impact: "",
     difficulty: "medium",
@@ -62,11 +68,15 @@ export default function SectionActivities({
         const haystack = `${item.title || ""} ${item.activity || ""} ${item.highlight || ""} ${
           item.called || ""
         } ${item.subtitle || ""} ${item.impact || item.benefit || ""} ${item.category || ""}`.toLowerCase();
+        const projectTeamText = Array.isArray(item.projectTeam)
+          ? item.projectTeam.join(" ").toLowerCase()
+          : "";
         const matchesText = haystack.includes(normalizedSearch);
+        const matchesTeam = projectTeamText.includes(normalizedSearch);
         const matchesCategory = !hasCategoryFilter || String(item.category || "") === roadmapCategoryFilter;
         const matchesDifficulty =
           !hasDifficultyFilter || String(item.difficulty || "") === roadmapDifficultyFilter;
-        return matchesText && matchesCategory && matchesDifficulty;
+        return (matchesText || matchesTeam) && matchesCategory && matchesDifficulty;
       })
     : orderedActivities.filter((item) => {
         const matchesCategory = !hasCategoryFilter || String(item.category || "") === roadmapCategoryFilter;
@@ -111,6 +121,20 @@ export default function SectionActivities({
             ? ROADMAP_IMPACT_MAX
           : maxLength;
 
+    if (field === "projectTeamInput") {
+      const cleaned = String(value || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 10)
+        .join(", ");
+      setDraft((prev) => ({
+        ...prev,
+        projectTeamInput: cleaned.slice(0, PROJECT_TEAM_MAX),
+      }));
+      return;
+    }
+
     setDraft((prev) => ({
       ...prev,
       [field]: String(value || "").slice(0, effectiveMaxLength),
@@ -119,12 +143,21 @@ export default function SectionActivities({
 
   function handleAdd() {
     if (calledInvalid) return;
+    const projectTeam = String(draft.projectTeamInput || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 10);
     const payload = isRoadmapSection
       ? {
           ...draft,
+          projectTeam,
           activity: String(draft.activity || draft.impact || "").trim(),
         }
-      : draft;
+      : {
+          ...draft,
+          projectTeam,
+        };
     const added = onUpsert(sectionIndex, payload, editingActivityId);
     if (added) {
       setDraft({
@@ -132,6 +165,9 @@ export default function SectionActivities({
         activity: "",
         highlight: "",
         called: "",
+        projectTeamInput: "",
+        cycleImplantation: "",
+        cycleTime: "",
         subtitle: "",
         impact: "",
         difficulty: "medium",
@@ -153,6 +189,9 @@ export default function SectionActivities({
       activity: "",
       highlight: "",
       called: "",
+      projectTeamInput: "",
+      cycleImplantation: "",
+      cycleTime: "",
       subtitle: "",
       impact: "",
       difficulty: "medium",
@@ -170,6 +209,9 @@ export default function SectionActivities({
       activity: String(item.activity || ""),
       highlight: String(item.highlight || ""),
       called: String(item.called || ""),
+      projectTeamInput: Array.isArray(item.projectTeam) ? item.projectTeam.join(", ") : "",
+      cycleImplantation: String(item.cycleImplantation || ""),
+      cycleTime: String(item.cycleTime || ""),
       subtitle: String(item.subtitle || ""),
       impact: String(item.impact || item.benefit || item.activity || ""),
       difficulty: String(item.difficulty || "medium"),
@@ -185,6 +227,9 @@ export default function SectionActivities({
       activity: "",
       highlight: "",
       called: "",
+      projectTeamInput: "",
+      cycleImplantation: "",
+      cycleTime: "",
       subtitle: "",
       impact: "",
       difficulty: "medium",
@@ -389,6 +434,9 @@ export default function SectionActivities({
                       <span className={`difficulty-chip ${difficultyClass[item.difficulty] || "difficulty-medium"}`}>
                         Dificuldade: {difficultyLabel[item.difficulty] || "Média"}
                       </span>
+                      {item.cycleImplantation ? (
+                        <span className="category-chip">Ciclo de Implantação: {item.cycleImplantation}</span>
+                      ) : null}
                       {item.category ? <span className="category-chip">Categoria: {item.category}</span> : null}
                     </div>
                     {item.subtitle ? <p className="subtitle-chip">Subtítulo: {item.subtitle}</p> : null}
@@ -396,9 +444,13 @@ export default function SectionActivities({
                   </>
                 ) : null}
                 {item.called ? <p className="called-chip">Chamado: {item.called}</p> : null}
+                {item.cycleTime ? <p className="called-chip">Tempo de Ciclo (Cycle Time): {item.cycleTime}</p> : null}
                 <p className="activity-description">{item.activity}</p>
+                {Array.isArray(item.projectTeam) && item.projectTeam.length ? (
+                  <p className="highlight-chip team-chip">Equipe do Projeto: {item.projectTeam.join(", ")}</p>
+                ) : null}
                 {item.highlight ? (
-                  <p className="highlight-chip">Ponto(s) a Destacar: {item.highlight}</p>
+                  <p className="highlight-chip">Pontos a Destacar: {item.highlight}</p>
                 ) : null}
               </li>
             );
@@ -471,15 +523,16 @@ export default function SectionActivities({
 
                       <div className="roadmap-input-grid">
                         <label>
-                          Dificuldade
-                          <select
-                            value={draft.difficulty}
-                            onChange={(event) => setDraft((prev) => ({ ...prev, difficulty: event.target.value }))}
-                          >
-                            <option value="low">Baixa</option>
-                            <option value="medium">Média</option>
-                            <option value="high">Alta</option>
-                          </select>
+                          Ciclo de Implantação
+                          <input
+                            value={draft.cycleImplantation}
+                            maxLength={CYCLE_IMPLANTATION_MAX}
+                            onChange={(event) =>
+                              updateDraft("cycleImplantation", event.target.value, CYCLE_IMPLANTATION_MAX)
+                            }
+                            placeholder="Ex.: 45 dias"
+                          />
+                          <small>{draft.cycleImplantation.length}/{CYCLE_IMPLANTATION_MAX}</small>
                         </label>
 
                         <label>
@@ -494,6 +547,18 @@ export default function SectionActivities({
                           </select>
                         </label>
                       </div>
+
+                      <label>
+                        Dificuldade
+                        <select
+                          value={draft.difficulty}
+                          onChange={(event) => setDraft((prev) => ({ ...prev, difficulty: event.target.value }))}
+                        >
+                          <option value="low">Baixa</option>
+                          <option value="medium">Média</option>
+                          <option value="high">Alta</option>
+                        </select>
+                      </label>
                     </>
                   ) : null}
 
@@ -532,9 +597,33 @@ export default function SectionActivities({
                     </label>
                   ) : null}
 
+                  <label>
+                    Tempo de Ciclo (Cycle Time)
+                    <input
+                      value={draft.cycleTime}
+                      maxLength={CYCLE_TIME_MAX}
+                      onChange={(event) => updateDraft("cycleTime", event.target.value, CYCLE_TIME_MAX)}
+                      placeholder="Ex.: 3h 20m"
+                    />
+                    <small>{draft.cycleTime.length}/{CYCLE_TIME_MAX}</small>
+                  </label>
+
+                  <label>
+                    Equipe do Projeto
+                    <input
+                      value={draft.projectTeamInput}
+                      maxLength={PROJECT_TEAM_MAX}
+                      onChange={(event) =>
+                        updateDraft("projectTeamInput", event.target.value, PROJECT_TEAM_MAX)
+                      }
+                      placeholder="Ex.: Ana Souza, Bruno Lima"
+                    />
+                    <small>{draft.projectTeamInput.length}/{PROJECT_TEAM_MAX}</small>
+                  </label>
+
                   {!isRoadmapSection ? (
                     <label>
-                      Ponto(s) a Destacar (opcional)
+                      Pontos a Destacar (opcional)
                       <textarea
                         rows="3"
                         value={draft.highlight}

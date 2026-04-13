@@ -614,6 +614,13 @@ h1 {
   white-space: pre-wrap;
 }
 
+.team-chip {
+  background: rgba(0, 112, 192, 0.11);
+  border-color: rgba(0, 112, 192, 0.32);
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .called-chip {
   margin: 0.05rem 0 0;
   border-radius: 10px;

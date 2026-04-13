@@ -89,6 +89,21 @@ function normalizePosition(value, fallback) {
   return fallback;
 }
 
+function normalizeProjectTeam(value) {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+  const unique = new Set();
+  source.forEach((item) => {
+    const normalized = String(item || "").trim().slice(0, 60);
+    if (normalized) unique.add(normalized);
+  });
+  return [...unique].slice(0, 10);
+}
+
 function normalizeSectionName(value) {
   return String(value || "")
     .normalize("NFD")
@@ -152,6 +167,9 @@ export function useWeeklyReport() {
         activity: activity.activity || "",
         highlight: activity.highlight || "",
         called: activity.called || "",
+        projectTeam: normalizeProjectTeam(activity.projectTeam),
+        cycleImplantation: activity.cycleImplantation || "",
+        cycleTime: activity.cycleTime || "",
         subtitle: activity.subtitle || "",
         impact: activity.impact || activity.benefit || activity.activity || "",
         benefit: activity.benefit || activity.activity || "",
@@ -310,6 +328,9 @@ export function useWeeklyReport() {
     const activity = String(draft.activity || "").trim();
     const highlight = String(draft.highlight || "").trim();
     const called = String(draft.called || "").replace(/\D+/g, "").slice(0, 20);
+    const projectTeam = normalizeProjectTeam(draft.projectTeam);
+    const cycleImplantation = String(draft.cycleImplantation || "").trim().slice(0, 50);
+    const cycleTime = String(draft.cycleTime || "").trim().slice(0, 40);
     const subtitle = String(draft.subtitle || "").trim().slice(0, 35);
     const impact = String(draft.impact || draft.benefit || "").trim().slice(0, 180);
     const benefit = impact;
@@ -357,6 +378,9 @@ export function useWeeklyReport() {
                     activity,
                     highlight,
                     called,
+                    projectTeam,
+                    cycleImplantation,
+                    cycleTime,
                     subtitle,
                     impact,
                     benefit,
@@ -383,6 +407,9 @@ export function useWeeklyReport() {
           activity,
           highlight,
           called,
+          projectTeam,
+          cycleImplantation,
+          cycleTime,
           subtitle,
           impact,
           benefit,
