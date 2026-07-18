@@ -826,6 +826,56 @@ export async function exportDashboardPdf({
   doc.save(`performance-dashboard-${startDate || "inicio"}-${endDate || "fim"}${pdfSuffix}.pdf`);
 }
 
+// ---------------------------------------------------------------------------
+// PowerPoint — tema luxury dark (mesmo do dashboard e do deck do redesign).
+// Base preto royal, acentos ouro e azul, Playfair Display + Sora.
+// ---------------------------------------------------------------------------
+
+const LX = {
+  bg: "07080D",
+  panel: "0D0F18",
+  panel2: "0A0D16",
+  line: "232734",
+  gold: "D4AF37",
+  goldL: "E8C96A",
+  blue: "2B4FD8",
+  blueL: "5A7BFF",
+  deep: "16225C",
+  ink: "FFFFFF",
+  body: "E9EBF2",
+  muted: "9AA1B5",
+  dim: "6D7488",
+  danger: "FF8D97",
+  ok: "6FD898",
+};
+
+const TITLE_FONT = "Playfair Display";
+const BODY_FONT = "Sora";
+
+const SLIDE_W = 13.33;
+const SLIDE_H = 7.5;
+const PAD = 0.75;
+const CONTENT_W = SLIDE_W - PAD * 2;
+
+function formatDurationPpt(milliseconds) {
+  if (milliseconds == null || Number.isNaN(Number(milliseconds))) return "—";
+  const totalMinutes = Math.round(Number(milliseconds) / 60000);
+  if (totalMinutes < 1) return "<1m";
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const totalHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (totalHours < 24) return minutes ? `${totalHours}h ${minutes}m` : `${totalHours}h`;
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours ? `${days}d ${hours}h` : `${days}d`;
+}
+
+function chunkList(items, size) {
+  const pages = [];
+  for (let i = 0; i < items.length; i += size) pages.push(items.slice(i, i + size));
+  return pages;
+}
+
 export async function exportDashboardPptx({
   startDate,
   endDate,
@@ -835,513 +885,380 @@ export async function exportDashboardPptx({
 }) {
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
-  const pptMode = options.mode === "executive" ? "executive" : "operational";
-  const watermarkEnabled = Boolean(options.watermark);
-  const density = options.density === "compact" ? "compact" : "comfortable";
   pptx.author = "Performance Dashboard";
   pptx.subject = "Relatório semanal";
   pptx.title = "Performance Dashboard";
+
+  const watermarkEnabled = Boolean(options.watermark);
   const syncText = `Sincronização: SULTS API Service | ${formatSyncTimestamp()}`;
-  const periodText = formatPeriodPpt(startDate, endDate);
+
   const sectionKpis = manualSectionKpis(sections);
-  const rows = statusRows(ticketSummary);
+  const manualTotal = sectionKpis.reduce((acc, item) => acc + item.total, 0);
   const operationalTotal = Number(ticketSummary?.total || 0);
-  const repactTotal = Math.max(Number(ticketSummary?.totalCombined || 0) - operationalTotal, 0);
-  const donutValues = [Math.max(operationalTotal, 0), Math.max(repactTotal, 0)];
-  const donutSum = donutValues[0] + donutValues[1];
-  const efficiency = donutSum > 0 ? Math.round((operationalTotal / donutSum) * 100) : 0;
-  const dynamic = buildDynamicPptNarrative(rows, operationalTotal, repactTotal, sectionKpis);
-
-  const cover = pptx.addSlide();
-  cover.background = { color: PPT_THEME.sapBlue };
-  cover.addShape(pptx.ShapeType.line, {
-    x: 0.8,
-    y: 1.95,
-    w: 4.6,
-    h: 0,
-    line: {
-      color: PPT_THEME.attentionOrange,
-      pt: 2,
-    },
-  });
-  cover.addText("Performance Dashboard", {
-    x: 0.8,
-    y: 1.2,
-    w: 10,
-    h: 0.7,
-    fontFace: "Segoe UI",
-    fontSize: 40,
-    bold: true,
-    color: PPT_THEME.white,
-  });
-  cover.addText("Apresentação Executiva de Operações e Sustentação", {
-    x: 0.8,
-    y: 2.2,
-    w: 10.5,
-    h: 0.5,
-    fontFace: "Segoe UI",
-    fontSize: 16,
-    color: "DCEAF2",
-  });
-  cover.addText(`Período analisado: ${periodText}`, {
-    x: 0.8,
-    y: 2.8,
-    w: 10.5,
-    h: 0.4,
-    fontFace: "Segoe UI",
-    fontSize: 13,
-    color: "BFDCEB",
-  });
-  if (watermarkEnabled) addPptWatermark(cover, "CONFIDENCIAL");
-  addStandardFooter(cover, syncText);
-
-  const executiveSlide = pptx.addSlide();
-  executiveSlide.background = { color: PPT_THEME.softBg };
-  executiveSlide.addText("Visão Geral do Ciclo de Vida", {
-    x: 0.7,
-    y: 0.35,
-    w: 6,
-    h: 0.5,
-    fontFace: "Segoe UI",
-    fontSize: 24,
-    bold: true,
-    color: PPT_THEME.baseDark,
-  });
-
-  const lifecycleCards = [
-    {
-      title: "Entrada",
-      subtitle: "Novos chamados e demandas recebidas",
-      value: sumStatusByTokens(rows, ["novo"]),
-      color: "DCEAF2",
-    },
-    {
-      title: "Processamento",
-      subtitle: "Fila ativa em andamento / aguardando",
-      value: sumStatusByTokens(rows, ["andamento", "aguardando"]),
-      color: "EAF3FB",
-    },
-    {
-      title: "Saída",
-      subtitle: "Resolvidos e concluídos no período",
-      value: sumStatusByTokens(rows, ["resolvido", "concluido"]),
-      color: "EDF6ED",
-    },
-  ];
-
-  lifecycleCards.forEach((card, index) => {
-    const x = 0.7 + index * 3.95;
-    executiveSlide.addShape(pptx.ShapeType.roundRect, {
-      x,
-      y: 1.15,
-      w: 3.7,
-      h: 2.3,
-      radius: 0.08,
-      fill: { color: card.color },
-      line: { color: "C8D8E5", pt: 1 },
-      shadow: {
-        type: "outer",
-        color: "B9C9D4",
-        blur: 2,
-        distance: 2,
-        angle: 45,
-        opacity: 0.2,
-      },
-    });
-    executiveSlide.addText(card.title, {
-      x: x + 0.2,
-      y: 1.35,
-      w: 2.4,
-      h: 0.3,
-      fontFace: "Segoe UI",
-      fontSize: 15,
-      bold: true,
-      color: PPT_THEME.baseDark,
-    });
-    executiveSlide.addText(String(card.value), {
-      x: x + 0.2,
-      y: 1.7,
-      w: 3.2,
-      h: 0.7,
-      fontFace: "Segoe UI",
-      fontSize: 34,
-      bold: true,
-      color: PPT_THEME.sapBlue,
-    });
-    executiveSlide.addText(card.subtitle, {
-      x: x + 0.2,
-      y: 2.5,
-      w: 3.2,
-      h: 0.75,
-      fontFace: "Segoe UI",
-      fontSize: 10,
-      color: PPT_THEME.textMuted,
-      breakLine: true,
-    });
-  });
-  executiveSlide.addShape(pptx.ShapeType.roundRect, {
-    x: 0.7,
-    y: 3.8,
-    w: 11.2,
-    h: 2.2,
-    radius: 0.06,
-    fill: { color: "FFFFFF" },
-    line: { color: "D6E1EA", pt: 1 },
-  });
-  executiveSlide.addText("Mensagem-chave", {
-    x: 0.95,
-    y: 4.05,
-    w: 3,
-    h: 0.3,
-    fontFace: "Segoe UI",
-    fontSize: 13,
-    bold: true,
-    color: PPT_THEME.baseDark,
-  });
-  executiveSlide.addText(
-    dynamic.message,
-    {
-      x: 0.95,
-      y: 4.42,
-      w: 10.6,
-      h: 1.25,
-      fontFace: "Segoe UI",
-      fontSize: 12,
-      color: "4F5F6D",
-      breakLine: true,
-    }
+  const renegotiated = Math.max(
+    Number(
+      ticketSummary?.renegotiated ?? Number(ticketSummary?.totalCombined || 0) - operationalTotal
+    ),
+    0
   );
-  addStandardFooter(executiveSlide, syncText);
-  if (watermarkEnabled) addPptWatermark(executiveSlide, "CONFIDENCIAL");
+  const consolidated = operationalTotal + manualTotal;
+  const rows = statusRows(ticketSummary);
+  const metrics = ticketSummary?.metrics || null;
 
-  const metricsSlide = pptx.addSlide();
-  metricsSlide.background = { color: PPT_THEME.softBg };
-  metricsSlide.addText("Métricas Estratégicas", {
-    x: 0.7,
-    y: 0.35,
-    w: 6,
-    h: 0.5,
-    fontFace: "Segoe UI",
-    fontSize: 24,
-    bold: true,
-    color: PPT_THEME.baseDark,
-  });
+  // ---------- helpers de desenho ----------
+  function newSlide() {
+    const slide = pptx.addSlide();
+    slide.background = { color: LX.bg };
+    return slide;
+  }
 
-  const kpiCards = [
-    {
-      label: "Volume Operacional",
-      sectionName: "",
-      isManual: false,
-      value: operationalTotal,
-      fill: "FFFFFF",
-      border: "C6DBEC",
-      valueColor: PPT_THEME.sapBlue,
-    },
-    {
-      label: "Prazos Renegociados",
-      sectionName: "",
-      isManual: false,
-      value: repactTotal,
-      fill: "FFF2E7",
-      border: "F5C9A8",
-      valueColor: PPT_THEME.attentionOrange,
-    },
-    ...sectionKpis.map((kpi) => ({
-      label: "Total de Atividades",
-      sectionName: kpi.name,
-      isManual: true,
-      value: kpi.total,
-      fill: "FFFFFF",
-      border: "D7E2EA",
-      valueColor: PPT_THEME.baseDark,
-    })),
-  ];
+  function footer(slide) {
+    slide.addText(syncText, {
+      x: PAD,
+      y: 6.95,
+      w: CONTENT_W,
+      h: 0.3,
+      fontFace: BODY_FONT,
+      fontSize: 9,
+      color: LX.dim,
+    });
+  }
 
-  kpiCards.forEach((card, index) => {
-    const columns = 3;
-    const row = Math.floor(index / columns);
-    const col = index % columns;
-    const x = 0.7 + col * 3.9;
-    const y = 1.0 + row * 1.85;
+  function header(slide, { eyebrow, title, number }) {
+    if (number) {
+      slide.addText(number, {
+        x: PAD,
+        y: 0.55,
+        w: 1.05,
+        h: 0.95,
+        fontFace: TITLE_FONT,
+        fontSize: 32,
+        color: LX.gold,
+        valign: "bottom",
+      });
+    }
+    const left = number ? PAD + 1.1 : PAD;
+    const width = CONTENT_W - (number ? 1.1 : 0);
+    slide.addText(String(eyebrow || "").toUpperCase(), {
+      x: left,
+      y: 0.58,
+      w: width,
+      h: 0.28,
+      fontFace: BODY_FONT,
+      fontSize: 10,
+      bold: true,
+      color: LX.gold,
+      charSpacing: 3,
+    });
+    slide.addText(safeText(title), {
+      x: left,
+      y: 0.88,
+      w: width,
+      h: 0.8,
+      fontFace: TITLE_FONT,
+      fontSize: 30,
+      color: LX.ink,
+    });
+  }
 
-    metricsSlide.addShape(pptx.ShapeType.roundRect, {
+  function panel(slide, { x, y, w, h, fill = LX.panel, border = LX.line }) {
+    slide.addShape(pptx.ShapeType.roundRect, {
       x,
       y,
-      w: 3.65,
-      h: 1.6,
-      radius: 0.06,
-      fill: { color: card.fill },
-      line: { color: card.border, pt: 1 },
-      shadow: {
-        type: "outer",
-        color: "C6D3DD",
-        blur: 1,
-        distance: 1,
-        angle: 45,
-        opacity: 0.15,
-      },
+      w,
+      h,
+      fill: { color: fill },
+      line: { color: border, pt: 1 },
+      rectRadius: 0.06,
     });
-    if (card.isManual) {
-      metricsSlide.addText(card.label, {
-        x: x + 0.18,
-        y: y + 0.16,
-        w: 3.25,
-        h: 0.24,
-        fontFace: "Segoe UI",
-        fontSize: 10,
-        color: PPT_THEME.textMuted,
-      });
-      metricsSlide.addText(card.sectionName, {
-        x: x + 0.18,
-        y: y + 0.4,
-        w: 3.25,
-        h: 0.38,
-        fontFace: "Segoe UI",
-        fontSize: 10,
-        color: PPT_THEME.textMuted,
-        breakLine: true,
-      });
-    } else {
-      metricsSlide.addText(card.label, {
-        x: x + 0.18,
-        y: y + 0.18,
-        w: 3.25,
-        h: 0.62,
-        fontFace: "Segoe UI",
-        fontSize: 10,
-        color: PPT_THEME.textMuted,
-        breakLine: true,
-      });
+  }
+
+  function accentBar(slide, { x, y, w = 0.55, h = 0.05, color = LX.blue }) {
+    slide.addShape(pptx.ShapeType.rect, { x, y, w, h, fill: { color }, line: { color, pt: 0 } });
+  }
+
+  // ---------- 1. CAPA ----------
+  const cover = newSlide();
+  cover.addText("RELATÓRIO SEMANAL", {
+    x: 0,
+    y: 2.15,
+    w: SLIDE_W,
+    h: 0.35,
+    align: "center",
+    fontFace: BODY_FONT,
+    fontSize: 12,
+    bold: true,
+    color: LX.gold,
+    charSpacing: 7,
+  });
+  cover.addText(
+    [
+      { text: "Apresentação de ", options: { color: LX.ink } },
+      { text: "Atividades", options: { color: LX.goldL, italic: true } },
+    ],
+    {
+      x: 0,
+      y: 2.6,
+      w: SLIDE_W,
+      h: 1.05,
+      align: "center",
+      fontFace: TITLE_FONT,
+      fontSize: 46,
     }
-    metricsSlide.addText(String(card.value), {
-      x: x + 0.18,
-      y: y + 0.84,
-      w: 3.2,
-      h: 0.55,
-      fontFace: "Segoe UI",
+  );
+  cover.addText("Central de inteligência operacional", {
+    x: 0,
+    y: 3.72,
+    w: SLIDE_W,
+    h: 0.4,
+    align: "center",
+    fontFace: BODY_FONT,
+    fontSize: 15,
+    color: LX.muted,
+  });
+
+  const pillW = 4.9;
+  const pillX = (SLIDE_W - pillW) / 2;
+  cover.addShape(pptx.ShapeType.roundRect, {
+    x: pillX,
+    y: 4.42,
+    w: pillW,
+    h: 0.66,
+    fill: { color: LX.panel },
+    line: { color: LX.gold, pt: 1 },
+    rectRadius: 0.5,
+  });
+  cover.addText(`${formatDateToBr(startDate)}    →    ${formatDateToBr(endDate)}`, {
+    x: pillX,
+    y: 4.42,
+    w: pillW,
+    h: 0.66,
+    align: "center",
+    valign: "middle",
+    fontFace: BODY_FONT,
+    fontSize: 13,
+    color: LX.body,
+  });
+  cover.addText("</>  Christian Silveira", {
+    x: 0,
+    y: 6.5,
+    w: SLIDE_W,
+    h: 0.3,
+    align: "center",
+    fontFace: BODY_FONT,
+    fontSize: 11,
+    color: LX.dim,
+  });
+  if (watermarkEnabled) addPptWatermark(cover, "CONFIDENCIAL");
+  footer(cover);
+
+  // ---------- 2. RESUMO EXECUTIVO ----------
+  const summary = newSlide();
+  header(summary, { eyebrow: "Visão consolidada", title: "Resumo Executivo" });
+
+  const gap = 0.3;
+  const unit = (CONTENT_W - gap * 3) / 4.35;
+  const kpiY = 2.35;
+  const kpiH = 2.5;
+  const wide = unit * 1.35;
+
+  panel(summary, { x: PAD, y: kpiY, w: wide, h: kpiH, fill: LX.deep, border: LX.gold });
+  summary.addText("INDICADOR CONSOLIDADO", {
+    x: PAD + 0.35,
+    y: kpiY + 0.35,
+    w: wide - 0.7,
+    h: 0.3,
+    fontFace: BODY_FONT,
+    fontSize: 10,
+    color: "C9D2FF",
+    charSpacing: 2,
+  });
+  summary.addText(String(consolidated), {
+    x: PAD + 0.35,
+    y: kpiY + 0.75,
+    w: wide - 0.7,
+    h: 1.05,
+    fontFace: TITLE_FONT,
+    fontSize: 46,
+    color: LX.goldL,
+  });
+  summary.addText("chamados + atividades no período", {
+    x: PAD + 0.35,
+    y: kpiY + 1.85,
+    w: wide - 0.7,
+    h: 0.3,
+    fontFace: BODY_FONT,
+    fontSize: 10,
+    color: "8D97C8",
+  });
+
+  const smallCards = [
+    { label: "Volume Operacional", value: operationalTotal, accent: LX.blue },
+    { label: "Prazos Renegociados", value: renegotiated, accent: LX.gold },
+    { label: "Atividades Registradas", value: manualTotal, accent: LX.blue },
+  ];
+  smallCards.forEach((item, index) => {
+    const x = PAD + wide + gap + index * (unit + gap);
+    panel(summary, { x, y: kpiY, w: unit, h: kpiH });
+    summary.addText(item.label, {
+      x: x + 0.3,
+      y: kpiY + 0.35,
+      w: unit - 0.6,
+      h: 0.5,
+      fontFace: BODY_FONT,
+      fontSize: 11,
+      color: LX.muted,
+    });
+    summary.addText(String(item.value), {
+      x: x + 0.3,
+      y: kpiY + 0.95,
+      w: unit - 0.6,
+      h: 0.85,
+      fontFace: BODY_FONT,
+      fontSize: 34,
+      bold: true,
+      color: LX.ink,
+    });
+    accentBar(summary, { x: x + 0.3, y: kpiY + 1.9, color: item.accent });
+  });
+  if (watermarkEnabled) addPptWatermark(summary, "CONFIDENCIAL");
+  footer(summary);
+
+  // ---------- 3. CHAMADOS SULTS ----------
+  const statusSlide = newSlide();
+  header(statusSlide, { eyebrow: "Suporte · sincronização SULTS", title: "Chamados SULTS" });
+
+  const cols = 3;
+  const cardGap = 0.28;
+  const cardW = (CONTENT_W - cardGap * (cols - 1)) / cols;
+  const cardH = 1.55;
+  rows.slice(0, 6).forEach((row, index) => {
+    const col = index % cols;
+    const line = Math.floor(index / cols);
+    const x = PAD + col * (cardW + cardGap);
+    const y = 2.45 + line * (cardH + cardGap);
+    const isGold = normalizeText(row.status).includes("conclu");
+    panel(statusSlide, {
+      x,
+      y,
+      w: cardW,
+      h: cardH,
+      fill: LX.panel,
+      border: isGold ? LX.gold : LX.blue,
+    });
+    statusSlide.addText(safeText(row.status), {
+      x: x + 0.3,
+      y: y + 0.28,
+      w: cardW - 0.6,
+      h: 0.45,
+      fontFace: BODY_FONT,
+      fontSize: 12,
+      color: isGold ? LX.goldL : LX.muted,
+    });
+    statusSlide.addText(String(row.primary), {
+      x: x + 0.3,
+      y: y + 0.72,
+      w: cardW - 0.6,
+      h: 0.6,
+      fontFace: BODY_FONT,
       fontSize: 28,
       bold: true,
-      color: card.valueColor,
+      color: isGold ? LX.goldL : LX.ink,
     });
   });
-  addStandardFooter(metricsSlide, syncText);
-  if (watermarkEnabled) addPptWatermark(metricsSlide, "CONFIDENCIAL");
-
-  const statusSlide = pptx.addSlide();
-  statusSlide.background = { color: PPT_THEME.softBg };
-  statusSlide.addText("Análise de Status (SULTS)", {
-    x: 0.7,
-    y: 0.35,
-    w: 7,
-    h: 0.5,
-    fontFace: "Segoe UI",
-    fontSize: 24,
-    bold: true,
-    color: PPT_THEME.baseDark,
-  });
-
-  const chartCategories = rows.map((row) => row.status);
-  const chartPrimaryValues = rows.map((row) => row.primary);
-
-  statusSlide.addShape(pptx.ShapeType.roundRect, {
-    x: 0.7,
-    y: 1.0,
-    w: 7.1,
-    h: 5.5,
-    radius: 0.05,
-    fill: { color: "FFFFFF" },
-    line: { color: "D6E1EA", pt: 1 },
-  });
-  statusSlide.addChart(
-    pptx.ChartType.bar,
-    [
-      {
-        name: "Volume",
-        labels: chartCategories,
-        values: chartPrimaryValues,
-      },
-    ],
+  statusSlide.addText(
+    `${operationalTotal} chamados no período · ${renegotiated} com prazo renegociado`,
     {
-      x: 1.0,
-      y: 1.35,
-      w: 6.5,
-      h: 4.9,
-      barDir: "bar",
-      barGrouping: "clustered",
-      showLegend: false,
-      catAxisLabelFontSize: 10,
-      valAxisLabelFontSize: 10,
-      valAxisMinVal: 0,
-      valAxisMaxVal: Math.max(...chartPrimaryValues, 1) + 2,
-      chartColors: [PPT_THEME.accentBlue],
-      showValue: true,
-      valGridLine: { color: "E5EDF3", pt: 1 },
-    }
-  );
-
-  statusSlide.addShape(pptx.ShapeType.roundRect, {
-    x: 8.1,
-    y: 1.0,
-    w: 3.8,
-    h: 5.5,
-    radius: 0.05,
-    fill: { color: "FFFFFF" },
-    line: { color: "D6E1EA", pt: 1 },
-  });
-
-  statusSlide.addText("Volume x Prazos Renegociados", {
-    x: 8.35,
-    y: 1.25,
-    w: 3.3,
-    h: 0.35,
-    fontFace: "Segoe UI",
-    fontSize: 12,
-    bold: true,
-    color: PPT_THEME.baseDark,
-    align: "center",
-  });
-
-  statusSlide.addChart(
-    pptx.ChartType.doughnut,
-    [
-      {
-        name: "Distribuicao",
-        labels: ["Volume Operacional", "Prazos Renegociados"],
-        values: donutSum > 0 ? donutValues : [1, 0],
-      },
-    ],
-    {
-      x: 8.45,
-      y: 1.75,
-      w: 3.1,
-      h: 3.1,
-      showLegend: false,
-      chartColors: [PPT_THEME.sapBlue, PPT_THEME.attentionOrange],
-      holeSize: 68,
-    }
-  );
-
-  statusSlide.addText(`${efficiency}%`, {
-    x: 9.32,
-    y: 2.95,
-    w: 1.4,
-    h: 0.4,
-    fontFace: "Segoe UI",
-    fontSize: 20,
-    bold: true,
-    color: PPT_THEME.baseDark,
-    align: "center",
-  });
-  statusSlide.addText("eficiência", {
-    x: 9.32,
-    y: 3.33,
-    w: 1.4,
-    h: 0.2,
-    fontFace: "Segoe UI",
-    fontSize: 9,
-    color: PPT_THEME.textMuted,
-    align: "center",
-  });
-  statusSlide.addText(`Volume Operacional: ${operationalTotal}\nPrazos Renegociados: ${repactTotal}`, {
-    x: 8.45,
-    y: 5.0,
-    w: 3.1,
-    h: 0.8,
-    fontFace: "Segoe UI",
-    fontSize: 10,
-    color: "425463",
-    align: "center",
-    breakLine: true,
-  });
-  addStandardFooter(statusSlide, syncText);
-  if (watermarkEnabled) addPptWatermark(statusSlide, "CONFIDENCIAL");
-
-  const technicalSlide = pptx.addSlide();
-  technicalSlide.background = { color: PPT_THEME.softBg };
-  technicalSlide.addText("Destaque Técnico", {
-    x: 0.7,
-    y: 0.35,
-    w: 6,
-    h: 0.5,
-    fontFace: "Segoe UI",
-    fontSize: 24,
-    bold: true,
-    color: PPT_THEME.baseDark,
-  });
-  technicalSlide.addShape(pptx.ShapeType.roundRect, {
-    x: 0.7,
-    y: 1.1,
-    w: 11.2,
-    h: 2.4,
-    radius: 0.05,
-    fill: { color: "FFFFFF" },
-    line: { color: "D6E1EA", pt: 1 },
-  });
-  technicalSlide.addText("Leitura Técnica da Semana", {
-    x: 0.95,
-    y: 1.35,
-    w: 4.5,
-    h: 0.3,
-    fontFace: "Segoe UI",
-    fontSize: 13,
-    bold: true,
-    color: PPT_THEME.baseDark,
-  });
-  technicalSlide.addText(
-    dynamic.technicalRead,
-    {
-      x: 0.95,
-      y: 1.75,
-      w: 10.7,
-      h: 1.4,
-      fontFace: "Segoe UI",
+      x: PAD,
+      y: 6.35,
+      w: CONTENT_W,
+      h: 0.35,
+      fontFace: BODY_FONT,
       fontSize: 12,
-      color: "4F5F6D",
-      breakLine: true,
+      color: LX.muted,
     }
   );
+  if (watermarkEnabled) addPptWatermark(statusSlide, "CONFIDENCIAL");
+  footer(statusSlide);
 
-  technicalSlide.addShape(pptx.ShapeType.roundRect, {
-    x: 0.7,
-    y: 3.8,
-    w: 11.2,
-    h: 2.6,
-    radius: 0.05,
-    fill: { color: "FFFFFF" },
-    line: { color: "D6E1EA", pt: 1 },
-  });
-  technicalSlide.addText("Indicadores de apoio", {
-    x: 0.95,
-    y: 4.05,
-    w: 3,
-    h: 0.3,
-    fontFace: "Segoe UI",
-    fontSize: 12,
-    bold: true,
-    color: PPT_THEME.baseDark,
-  });
-  const supportLines = [
-    `Período analisado: ${periodText}`,
-    `Total de status monitorados: ${rows.length}`,
-    `Atividades manuais registradas: ${dynamic.manualTotal}`,
-    `Chamados em destaque de atenção: ${dynamic.awaitingCount}`,
-  ];
-  technicalSlide.addText(
-    supportLines.map((line) => ({ text: line, options: { bullet: { indent: 14 } } })),
-    {
-      x: 0.95,
-      y: 4.45,
-      w: 10.4,
-      h: 1.8,
-      fontFace: "Segoe UI",
-      fontSize: 11,
-      color: "4F5F6D",
-      breakLine: true,
-    }
-  );
-  addStandardFooter(technicalSlide, syncText);
-  if (watermarkEnabled) addPptWatermark(technicalSlide, "CONFIDENCIAL");
+  // ---------- 4. INDICADORES DE ATENDIMENTO ----------
+  if (metrics) {
+    const slaSlide = newSlide();
+    header(slaSlide, { eyebrow: "Qualidade do atendimento", title: "Indicadores de Atendimento" });
 
+    const items = [
+      {
+        label: "Tempo de 1ª Resposta",
+        value: formatDurationPpt(metrics.firstResponseMs),
+        sub: `média · ${Number(metrics.firstResponseCount || 0)} chamados`,
+        accent: LX.blue,
+      },
+      {
+        label: "Tempo de Resolução",
+        value: formatDurationPpt(metrics.resolutionMs),
+        sub: `média · ${Number(metrics.resolutionCount || 0)} resolvidos`,
+        accent: LX.blue,
+      },
+      {
+        label: "Cumprimento de SLA",
+        value: metrics.slaPct == null ? "—" : `${metrics.slaPct}%`,
+        sub: `${Number(metrics.slaWithin || 0)}/${Number(metrics.slaTotal || 0)} no prazo`,
+        accent: LX.gold,
+      },
+      {
+        label: "Satisfação (CSAT)",
+        value: metrics.csatAvg == null ? "—" : `${Number(metrics.csatAvg).toFixed(1)}/5`,
+        sub: `${Number(metrics.csatCount || 0)} avaliações`,
+        accent: LX.gold,
+      },
+      {
+        label: "Taxa de Resolução",
+        value: metrics.resolutionRatePct == null ? "—" : `${metrics.resolutionRatePct}%`,
+        sub: `${Number(metrics.closedInPeriod || 0)} fechados · ${Number(metrics.openedInPeriod || 0)} abertos`,
+        accent: LX.blue,
+      },
+    ];
+
+    const mGap = 0.25;
+    const mW = (CONTENT_W - mGap * 4) / 5;
+    items.forEach((item, index) => {
+      const x = PAD + index * (mW + mGap);
+      const y = 2.6;
+      panel(slaSlide, { x, y, w: mW, h: 2.1 });
+      slaSlide.addText(item.label, {
+        x: x + 0.22,
+        y: y + 0.25,
+        w: mW - 0.44,
+        h: 0.5,
+        fontFace: BODY_FONT,
+        fontSize: 10.5,
+        color: LX.muted,
+      });
+      slaSlide.addText(item.value, {
+        x: x + 0.22,
+        y: y + 0.78,
+        w: mW - 0.44,
+        h: 0.6,
+        fontFace: TITLE_FONT,
+        fontSize: 24,
+        color: LX.ink,
+      });
+      accentBar(slaSlide, { x: x + 0.22, y: y + 1.42, w: 0.45, color: item.accent });
+      slaSlide.addText(item.sub, {
+        x: x + 0.22,
+        y: y + 1.55,
+        w: mW - 0.44,
+        h: 0.4,
+        fontFace: BODY_FONT,
+        fontSize: 9,
+        color: LX.dim,
+      });
+    });
+    if (watermarkEnabled) addPptWatermark(slaSlide, "CONFIDENCIAL");
+    footer(slaSlide);
+  }
+
+  // ---------- 5..N. SEÇÕES DE ATIVIDADES ----------
   const populatedSections = (sections || []).filter(
     (section) =>
       !isRoadmapSectionName(section?.name) &&
@@ -1349,305 +1266,248 @@ export async function exportDashboardPptx({
       section.activities.length > 0
   );
 
-  if (pptMode === "operational") {
-    for (const section of populatedSections) {
-      const activities = sortActivitiesByPosition(section.activities || []);
-      const pages = splitActivitiesForPpt(activities);
-      const densityGap = density === "compact" ? 0.08 : 0.12;
+  populatedSections.forEach((section, sectionIndex) => {
+    const activities = sortActivitiesByPosition(section.activities || []);
+    const pages = chunkList(activities, 4);
 
-      pages.forEach((chunk, i) => {
-        const slide = pptx.addSlide();
-        slide.background = { color: PPT_THEME.softBg };
-
-        const sectionName = safeText(section.name) || "Secao";
-        const titleSuffix = pages.length > 1 ? ` (${i + 1}/${pages.length})` : "";
-        slide.addText(`${sectionName}${titleSuffix}`, {
-          x: 0.7,
-          y: 0.35,
-          w: 10.5,
-          h: 0.5,
-          fontFace: "Segoe UI",
-          fontSize: 23,
-          bold: true,
-          color: PPT_THEME.baseDark,
-        });
-        slide.addShape(pptx.ShapeType.roundRect, {
-          x: 10.1,
-          y: 0.35,
-          w: 1.8,
-          h: 0.6,
-          radius: 0.08,
-          fill: { color: "FFFFFF" },
-          line: { color: "D6E1EA", pt: 1 },
-        });
-        slide.addText(String(activities.length), {
-          x: 10.1,
-          y: 0.45,
-          w: 1.8,
-          h: 0.25,
-          fontFace: "Segoe UI",
-          fontSize: 18,
-          bold: true,
-          color: PPT_THEME.sapBlue,
-          align: "center",
-        });
-        slide.addText("atividades", {
-          x: 10.1,
-          y: 0.7,
-          w: 1.8,
-          h: 0.2,
-          fontFace: "Segoe UI",
-          fontSize: 8,
-          color: PPT_THEME.textMuted,
-          align: "center",
-        });
-
-      let yCursor = 1.15;
-      chunk.forEach(({ layout }) => {
-        slide.addShape(pptx.ShapeType.roundRect, {
-          x: 0.7,
-          y: yCursor,
-          w: 11.2,
-          h: layout.height,
-          radius: 0.05,
-          fill: { color: "FFFFFF" },
-          line: { color: "D6E1EA", pt: 1 },
-        });
-
-        if (layout.called) {
-          slide.addShape(pptx.ShapeType.roundRect, {
-            x: 9.15,
-            y: yCursor + 0.1,
-            w: 2.4,
-            h: 0.45,
-            radius: 0.05,
-            fill: { color: "EAF3FB" },
-            line: { color: "CFE1EE", pt: 1 },
-          });
-          slide.addText("Chamado", {
-            x: 9.3,
-            y: yCursor + 0.14,
-            w: 2.1,
-            h: 0.1,
-            fontFace: "Segoe UI",
-            fontSize: 8,
-            bold: true,
-            color: PPT_THEME.textMuted,
-          });
-          slide.addText(layout.called, {
-            x: 9.3,
-            y: yCursor + 0.27,
-            w: 2.1,
-            h: 0.18,
-            fontFace: "Segoe UI",
-            fontSize: 10,
-            bold: true,
-            color: PPT_THEME.sapBlue,
-          });
-        }
-
-        slide.addText(layout.title, {
-          x: 0.95,
-          y: yCursor + layout.titleY,
-          w: layout.called ? 8 : 10.5,
-          h: layout.titleHeight,
-          fontFace: "Segoe UI",
-          fontSize: 12,
-          bold: true,
-          color: PPT_THEME.baseDark,
-          breakLine: true,
-        });
-        slide.addText(layout.description, {
-          x: 0.95,
-          y: yCursor + layout.descriptionY,
-          w: 10.5,
-          h: layout.descriptionHeight,
-          fontFace: "Segoe UI",
-          fontSize: 10,
-          color: "4F5F6D",
-          breakLine: true,
-        });
-        if (layout.cycleTime) {
-          slide.addText(`Tempo de Ciclo (Cycle Time): ${layout.cycleTime}`, {
-            x: 0.95,
-            y: yCursor + layout.cycleTimeY,
-            w: 10.5,
-            h: layout.cycleTimeHeight,
-            fontFace: "Segoe UI",
-            fontSize: 9,
-            color: PPT_THEME.baseDark,
-            breakLine: true,
-          });
-        }
-        if (layout.projectTeam) {
-          slide.addText(`Equipe do Projeto: ${layout.projectTeam}`, {
-            x: 0.95,
-            y: yCursor + layout.projectTeamY,
-            w: 10.5,
-            h: layout.projectTeamHeight,
-            fontFace: "Segoe UI",
-            fontSize: 9,
-            bold: true,
-            color: PPT_THEME.sapBlue,
-            breakLine: true,
-          });
-        }
-        if (layout.highlight) {
-          slide.addText(`Pontos a Destacar: ${layout.highlight}`, {
-            x: 0.95,
-            y: yCursor + layout.highlightY,
-            w: 10.5,
-            h: layout.highlightHeight,
-            fontFace: "Segoe UI",
-            fontSize: 9,
-            color: PPT_THEME.attentionOrange,
-            italic: true,
-            breakLine: true,
-          });
-        }
-        yCursor += layout.height + densityGap;
+    pages.forEach((pageItems, pageIndex) => {
+      const slide = newSlide();
+      header(slide, {
+        eyebrow: "Seção de atividades",
+        title: section.name,
+        number: String(sectionIndex + 1).padStart(2, "0"),
       });
-        addStandardFooter(slide, syncText);
-        if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
-      });
-    }
-  }
-
-  const roadmapItems = roadmapItemsFromSections(sections);
-  const roadmapItemsPerSlide = 6;
-  const roadmapSlides = Math.ceil(roadmapItems.length / roadmapItemsPerSlide);
-
-  for (let slideIndex = 0; slideIndex < roadmapSlides; slideIndex += 1) {
-    const roadmapSlide = pptx.addSlide();
-    roadmapSlide.background = { color: PPT_THEME.softBg };
-
-    roadmapSlide.addText("Roadmap de Ações e Melhoria Contínua", {
-      x: 0.7,
-      y: 0.35,
-      w: 10.5,
-      h: 0.5,
-      fontFace: "Segoe UI",
-      fontSize: 24,
-      bold: true,
-      color: PPT_THEME.baseDark,
-    });
-
-    roadmapSlide.addText("Visão macro de iniciativas priorizadas por esforço e impacto operacional.", {
-      x: 0.72,
-      y: 0.84,
-      w: 10.6,
-      h: 0.3,
-      fontFace: "Segoe UI",
-      fontSize: 10,
-      color: PPT_THEME.textMuted,
-    });
-
-    roadmapSlide.addShape(pptx.ShapeType.roundRect, {
-      x: 0.72,
-      y: 1.12,
-      w: 10.7,
-      h: 0.36,
-      radius: 0.05,
-      fill: { color: "FFFFFF" },
-      line: { color: "D6E1EA", pt: 1 },
-    });
-    roadmapSlide.addText("Legenda de dificuldade: Verde = Baixa | Amarelo = Média | Vermelho = Alta", {
-      x: 0.92,
-      y: 1.22,
-      w: 10.3,
-      h: 0.18,
-      fontFace: "Segoe UI",
-      fontSize: 9,
-      color: PPT_THEME.textMuted,
-      align: "center",
-    });
-
-    const chunk = roadmapItems.slice(
-      slideIndex * roadmapItemsPerSlide,
-      slideIndex * roadmapItemsPerSlide + roadmapItemsPerSlide
-    );
-
-    chunk.forEach((item, index) => {
-        const row = Math.floor(index / 3);
-        const col = index % 3;
-        const cardX = 0.7 + col * 3.82;
-        const cardY = 1.6 + row * 2.55;
-        const style = roadmapDifficultyStyle(item.difficulty);
-
-        roadmapSlide.addShape(pptx.ShapeType.roundRect, {
-          x: cardX,
-          y: cardY,
-          w: 3.58,
-          h: 2.4,
-          radius: 0.06,
-          fill: { color: style.fill },
-          line: { color: style.line, pt: 1 },
-        });
-
-        roadmapSlide.addText(item.title, {
-          x: cardX + 0.18,
-          y: cardY + 0.16,
-          w: 3.2,
-          h: 0.5,
-          fontFace: "Segoe UI",
-          fontSize: 12,
-          bold: true,
-          color: style.text,
-          breakLine: true,
-        });
-
-        roadmapSlide.addText(item.subtitle, {
-          x: cardX + 0.18,
-          y: cardY + 0.66,
-          w: 3.2,
-          h: 0.35,
-          fontFace: "Segoe UI",
-          fontSize: 9,
-          bold: true,
-          color: style.text,
-          breakLine: true,
-        });
-
-        roadmapSlide.addText(item.impact, {
-          x: cardX + 0.18,
-          y: cardY + 1.05,
-          w: 3.2,
-          h: 0.95,
-          fontFace: "Segoe UI",
-          fontSize: 10,
-          color: style.text,
-          breakLine: true,
-        });
-
-        roadmapSlide.addText(item.cycleImplantation ? `Ciclo de Implantação: ${item.cycleImplantation}` : "", {
-          x: cardX + 0.18,
-          y: cardY + 2.03,
-          w: 1.95,
-          h: 0.22,
-          fontFace: "Segoe UI",
-          fontSize: 8,
-          bold: true,
-          color: style.text,
-          align: "left",
-        });
-
-        roadmapSlide.addText(item.category, {
-          x: cardX + 1.95,
-          y: cardY + 2.12,
-          w: 1.45,
-          h: 0.18,
-          fontFace: "Segoe UI",
-          fontSize: 8,
-          bold: true,
-          color: style.text,
+      if (pages.length > 1) {
+        slide.addText(`${pageIndex + 1}/${pages.length}`, {
+          x: SLIDE_W - PAD - 1,
+          y: 0.88,
+          w: 1,
+          h: 0.4,
           align: "right",
+          fontFace: BODY_FONT,
+          fontSize: 11,
+          color: LX.dim,
         });
-    });
+      }
 
-    addStandardFooter(roadmapSlide, syncText);
-    if (watermarkEnabled) addPptWatermark(roadmapSlide, "CONFIDENCIAL");
+      const aGap = 0.3;
+      const aW = (CONTENT_W - aGap) / 2;
+      const aH = 2.05;
+
+      pageItems.forEach((activity, index) => {
+        const col = index % 2;
+        const line = Math.floor(index / 2);
+        const x = PAD + col * (aW + aGap);
+        const y = 2.35 + line * (aH + aGap);
+        const highlight = safeText(activity?.highlight);
+        const accent = highlight ? LX.gold : LX.blue;
+
+        panel(slide, { x, y, w: aW, h: aH });
+        // barra de acento à esquerda
+        slide.addShape(pptx.ShapeType.rect, {
+          x,
+          y,
+          w: 0.06,
+          h: aH,
+          fill: { color: accent },
+          line: { color: accent, pt: 0 },
+        });
+
+        slide.addText(safeText(activity?.title) || "Atividade", {
+          x: x + 0.35,
+          y: y + 0.22,
+          w: aW - 0.7,
+          h: 0.45,
+          fontFace: BODY_FONT,
+          fontSize: 14,
+          bold: true,
+          color: LX.ink,
+        });
+        slide.addText(preserveMultiline(activity?.activity) || "", {
+          x: x + 0.35,
+          y: y + 0.72,
+          w: aW - 0.7,
+          h: highlight ? 0.62 : 1.05,
+          fontFace: BODY_FONT,
+          fontSize: 11,
+          color: LX.muted,
+          valign: "top",
+        });
+
+        const chips = [];
+        if (safeText(activity?.called)) chips.push(`Chamado ${safeText(activity.called)}`);
+        if (safeText(activity?.cycleTime)) chips.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
+        if (Array.isArray(activity?.projectTeam) && activity.projectTeam.length) {
+          chips.push(`Equipe: ${activity.projectTeam.join(", ")}`);
+        }
+        if (chips.length) {
+          slide.addText(chips.join("   ·   "), {
+            x: x + 0.35,
+            y: y + (highlight ? 1.36 : 1.5),
+            w: aW - 0.7,
+            h: 0.3,
+            fontFace: BODY_FONT,
+            fontSize: 9,
+            color: LX.blueL,
+          });
+        }
+        if (highlight) {
+          slide.addText(`★ ${highlight}`, {
+            x: x + 0.35,
+            y: y + 1.62,
+            w: aW - 0.7,
+            h: 0.36,
+            fontFace: BODY_FONT,
+            fontSize: 9.5,
+            color: LX.goldL,
+          });
+        }
+      });
+
+      if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
+      footer(slide);
+    });
+  });
+
+  // ---------- ROADMAP ----------
+  const roadmapItems = roadmapItemsFromSections(sections);
+  if (roadmapItems.length) {
+    const pages = chunkList(roadmapItems, 3);
+    pages.forEach((pageItems, pageIndex) => {
+      const slide = newSlide();
+      header(slide, { eyebrow: "Próximos passos", title: "Roadmap de Ações" });
+      if (pages.length > 1) {
+        slide.addText(`${pageIndex + 1}/${pages.length}`, {
+          x: SLIDE_W - PAD - 1,
+          y: 0.88,
+          w: 1,
+          h: 0.4,
+          align: "right",
+          fontFace: BODY_FONT,
+          fontSize: 11,
+          color: LX.dim,
+        });
+      }
+
+      const rGap = 0.28;
+      const rW = (CONTENT_W - rGap * 2) / 3;
+      const rH = 3.6;
+      pageItems.forEach((item, index) => {
+        const x = PAD + index * (rW + rGap);
+        const y = 2.4;
+        const diffColor =
+          item.difficulty === "high" ? LX.danger : item.difficulty === "low" ? LX.ok : LX.goldL;
+        const diffLabel =
+          item.difficulty === "high" ? "Alta" : item.difficulty === "low" ? "Baixa" : "Média";
+
+        panel(slide, { x, y, w: rW, h: rH, border: LX.gold });
+        slide.addText(safeText(item.title) || "Item", {
+          x: x + 0.3,
+          y: y + 0.28,
+          w: rW - 0.6,
+          h: 0.6,
+          fontFace: BODY_FONT,
+          fontSize: 14,
+          bold: true,
+          color: LX.ink,
+        });
+        slide.addText(`Dificuldade: ${diffLabel}${item.category ? `  ·  ${item.category}` : ""}`, {
+          x: x + 0.3,
+          y: y + 0.92,
+          w: rW - 0.6,
+          h: 0.3,
+          fontFace: BODY_FONT,
+          fontSize: 9.5,
+          color: diffColor,
+        });
+        if (item.subtitle) {
+          slide.addText(item.subtitle, {
+            x: x + 0.3,
+            y: y + 1.28,
+            w: rW - 0.6,
+            h: 0.5,
+            fontFace: BODY_FONT,
+            fontSize: 10.5,
+            italic: true,
+            color: LX.muted,
+          });
+        }
+        if (item.impact) {
+          slide.addText(`Impacto: ${item.impact}`, {
+            x: x + 0.3,
+            y: y + 1.85,
+            w: rW - 0.6,
+            h: 1.2,
+            fontFace: BODY_FONT,
+            fontSize: 10.5,
+            color: LX.body,
+            valign: "top",
+          });
+        }
+        if (item.cycleImplantation) {
+          slide.addText(`Ciclo: ${item.cycleImplantation}`, {
+            x: x + 0.3,
+            y: y + 3.1,
+            w: rW - 0.6,
+            h: 0.3,
+            fontFace: BODY_FONT,
+            fontSize: 9.5,
+            color: LX.dim,
+          });
+        }
+      });
+      if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
+      footer(slide);
+    });
   }
 
-  const modeSuffix = pptMode === "executive" ? "-executivo" : "-operacional";
-  await pptx.writeFile({ fileName: `performance-dashboard-${startDate || "inicio"}-${endDate || "fim"}${modeSuffix}.pptx` });
+  // ---------- ENCERRAMENTO ----------
+  const closing = newSlide();
+  closing.addText("OBRIGADO", {
+    x: 0,
+    y: 2.9,
+    w: SLIDE_W,
+    h: 0.4,
+    align: "center",
+    fontFace: BODY_FONT,
+    fontSize: 12,
+    bold: true,
+    color: LX.gold,
+    charSpacing: 7,
+  });
+  closing.addText("Perguntas e próximos passos", {
+    x: 0,
+    y: 3.35,
+    w: SLIDE_W,
+    h: 0.9,
+    align: "center",
+    fontFace: TITLE_FONT,
+    fontSize: 36,
+    color: LX.ink,
+  });
+  closing.addText(`Período analisado: ${formatPeriodPpt(startDate, endDate)}`, {
+    x: 0,
+    y: 4.3,
+    w: SLIDE_W,
+    h: 0.4,
+    align: "center",
+    fontFace: BODY_FONT,
+    fontSize: 13,
+    color: LX.muted,
+  });
+  closing.addText("</>  Christian Silveira", {
+    x: 0,
+    y: 6.5,
+    w: SLIDE_W,
+    h: 0.3,
+    align: "center",
+    fontFace: BODY_FONT,
+    fontSize: 11,
+    color: LX.dim,
+  });
+  footer(closing);
+
+  await pptx.writeFile({
+    fileName: `performance-dashboard-${startDate || "inicio"}-${endDate || "fim"}.pptx`,
+  });
 }
