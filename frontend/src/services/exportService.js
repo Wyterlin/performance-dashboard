@@ -1531,19 +1531,117 @@ export async function exportDashboardPptx({
       section.activities.length > 0
   );
 
+  // Desenha um card de atividade (aresta esquerda reta + barra de acento).
+  function activityCard(slide, activity, { x, y, w, h }) {
+    const highlight = safeText(activity?.highlight);
+    const accent = highlight ? LX.gold : LX.blue;
+
+    panel(slide, { x, y, w, h });
+    // A barra cobre o canto arredondado, deixando a aresta esquerda reta.
+    slide.addShape(pptx.ShapeType.rect, {
+      x,
+      y,
+      w: 0.07,
+      h,
+      fill: { color: accent },
+      line: { color: accent, pt: 0 },
+    });
+
+    const padL = x + 0.42;
+    const innerW = w - 0.84;
+    slide.addText(safeText(activity?.title) || "Atividade", {
+      x: padL,
+      y: y + 0.3,
+      w: innerW,
+      h: 0.5,
+      fontFace: BODY_FONT,
+      fontSize: 17,
+      bold: true,
+      color: LX.ink,
+    });
+    slide.addText(preserveMultiline(activity?.activity) || "", {
+      x: padL,
+      y: y + 0.88,
+      w: innerW,
+      h: highlight ? 0.78 : 1.15,
+      fontFace: BODY_FONT,
+      fontSize: 12.5,
+      color: LX.muted,
+      lineSpacingMultiple: 1.3,
+      valign: "top",
+    });
+
+    const chips = [];
+    if (safeText(activity?.called)) chips.push(`Chamado ${safeText(activity.called)}`);
+    if (safeText(activity?.cycleTime)) chips.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
+    if (Array.isArray(activity?.projectTeam) && activity.projectTeam.length) {
+      chips.push(`Equipe: ${activity.projectTeam.join(", ")}`);
+    }
+    if (chips.length) {
+      slide.addText(chips.join("   ·   "), {
+        x: padL,
+        y: y + h - (highlight ? 0.95 : 0.55),
+        w: innerW,
+        h: 0.3,
+        fontFace: BODY_FONT,
+        fontSize: 10,
+        color: LX.blueL,
+      });
+    }
+    if (highlight) {
+      slide.addText(`★ ${highlight}`, {
+        x: padL,
+        y: y + h - 0.6,
+        w: innerW,
+        h: 0.42,
+        fontFace: BODY_FONT,
+        fontSize: 11,
+        color: LX.goldL,
+      });
+    }
+  }
+
+  // Card de destaque azul (usado pelo "Fluxo Atendido").
+  function calloutCard(slide, { x, y, w, h, label, value }) {
+    panel(slide, { x, y, w, h, fill: LX.deep, border: LX.goldSoft });
+    slide.addText(String(label || "").toUpperCase(), {
+      x: x + 0.42,
+      y: y + 0.45,
+      w: w - 0.84,
+      h: 0.32,
+      fontFace: BODY_FONT,
+      fontSize: 11,
+      color: "C9D2FF",
+      charSpacing: 2,
+    });
+    slide.addText(safeText(value), {
+      x: x + 0.42,
+      y: y + 0.85,
+      w: w - 0.84,
+      h: h - 1.3,
+      fontFace: BODY_FONT,
+      fontSize: 19,
+      color: LX.ink,
+      lineSpacingMultiple: 1.25,
+      valign: "top",
+    });
+  }
+
   populatedSections.forEach((section, sectionIndex) => {
     const activities = sortActivitiesByPosition(section.activities || []);
-    const pages = chunkList(activities, 4);
+    const number = String(sectionIndex + 1).padStart(2, "0");
+    // Atividades com "Fluxo Atendido" ganham slide próprio, ao lado do card.
+    const withFlow = activities.filter((item) => safeText(item?.flowText));
+    const withoutFlow = activities.filter((item) => !safeText(item?.flowText));
+    const pages = chunkList(withoutFlow, 4);
+    const totalSlides = pages.length + withFlow.length;
+    let slideNo = 0;
 
-    pages.forEach((pageItems, pageIndex) => {
-      const slide = newSlide();
-      header(slide, {
-        eyebrow: "Seção de atividades",
-        title: section.name,
-        number: String(sectionIndex + 1).padStart(2, "0"),
-      });
-      if (pages.length > 1) {
-        slide.addText(`${pageIndex + 1}/${pages.length}`, {
+    function sectionHeader(slide) {
+      slideNo += 1;
+      header(slide, { eyebrow: "Seção de atividades", title: section.name, number });
+      if (totalSlides > 1) {
+        slide.addText(`${slideNo}/${totalSlides}`, {
           x: SLIDE_W - PAD - 1,
           y: 0.88,
           w: 1,
@@ -1554,79 +1652,48 @@ export async function exportDashboardPptx({
           color: LX.dim,
         });
       }
+    }
 
-      const aGap = 0.3;
+    pages.forEach((pageItems) => {
+      const slide = newSlide();
+      sectionHeader(slide);
+
+      const aGap = 0.32;
       const aW = (CONTENT_W - aGap) / 2;
-      const aH = 2.05;
+      const aH = pageItems.length > 2 ? 2.05 : 2.6;
 
       pageItems.forEach((activity, index) => {
         const col = index % 2;
         const line = Math.floor(index / 2);
-        const x = PAD + col * (aW + aGap);
-        const y = 2.35 + line * (aH + aGap);
-        const highlight = safeText(activity?.highlight);
-        const accent = highlight ? LX.gold : LX.blue;
-
-        panel(slide, { x, y, w: aW, h: aH });
-        // barra de acento à esquerda
-        slide.addShape(pptx.ShapeType.rect, {
-          x,
-          y,
-          w: 0.06,
+        activityCard(slide, activity, {
+          x: PAD + col * (aW + aGap),
+          y: 2.3 + line * (aH + aGap),
+          w: aW,
           h: aH,
-          fill: { color: accent },
-          line: { color: accent, pt: 0 },
         });
+      });
 
-        slide.addText(safeText(activity?.title) || "Atividade", {
-          x: x + 0.35,
-          y: y + 0.22,
-          w: aW - 0.7,
-          h: 0.45,
-          fontFace: BODY_FONT,
-          fontSize: 14,
-          bold: true,
-          color: LX.ink,
-        });
-        slide.addText(preserveMultiline(activity?.activity) || "", {
-          x: x + 0.35,
-          y: y + 0.72,
-          w: aW - 0.7,
-          h: highlight ? 0.62 : 1.05,
-          fontFace: BODY_FONT,
-          fontSize: 11,
-          color: LX.muted,
-          valign: "top",
-        });
+      if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
+      footer(slide);
+    });
 
-        const chips = [];
-        if (safeText(activity?.called)) chips.push(`Chamado ${safeText(activity.called)}`);
-        if (safeText(activity?.cycleTime)) chips.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
-        if (Array.isArray(activity?.projectTeam) && activity.projectTeam.length) {
-          chips.push(`Equipe: ${activity.projectTeam.join(", ")}`);
-        }
-        if (chips.length) {
-          slide.addText(chips.join("   ·   "), {
-            x: x + 0.35,
-            y: y + (highlight ? 1.36 : 1.5),
-            w: aW - 0.7,
-            h: 0.3,
-            fontFace: BODY_FONT,
-            fontSize: 9,
-            color: LX.blueL,
-          });
-        }
-        if (highlight) {
-          slide.addText(`★ ${highlight}`, {
-            x: x + 0.35,
-            y: y + 1.62,
-            w: aW - 0.7,
-            h: 0.36,
-            fontFace: BODY_FONT,
-            fontSize: 9.5,
-            color: LX.goldL,
-          });
-        }
+    withFlow.forEach((activity) => {
+      const slide = newSlide();
+      sectionHeader(slide);
+
+      const fGap = 0.32;
+      const leftW = (CONTENT_W - fGap) * 0.56;
+      const rightW = CONTENT_W - fGap - leftW;
+      const fH = 2.6;
+
+      activityCard(slide, activity, { x: PAD, y: 2.3, w: leftW, h: fH });
+      calloutCard(slide, {
+        x: PAD + leftW + fGap,
+        y: 2.3,
+        w: rightW,
+        h: fH,
+        label: "Fluxo atendido",
+        value: activity.flowText,
       });
 
       if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
@@ -1635,118 +1702,150 @@ export async function exportDashboardPptx({
   });
 
   // ---------- ROADMAP ----------
+  // Um item por slide, em 2 colunas: card do item + card de impacto (como no deck).
   const roadmapItems = roadmapItemsFromSections(sections);
-  if (roadmapItems.length) {
-    const pages = chunkList(roadmapItems, 3);
-    pages.forEach((pageItems, pageIndex) => {
-      const slide = newSlide();
-      header(slide, { eyebrow: "Próximos passos", title: "Roadmap de Ações" });
-      if (pages.length > 1) {
-        slide.addText(`${pageIndex + 1}/${pages.length}`, {
-          x: SLIDE_W - PAD - 1,
-          y: 0.88,
-          w: 1,
-          h: 0.4,
-          align: "right",
-          fontFace: BODY_FONT,
-          fontSize: 11,
-          color: LX.dim,
-        });
-      }
-
-      const rGap = 0.28;
-      const rW = (CONTENT_W - rGap * 2) / 3;
-      const rH = 3.6;
-      pageItems.forEach((item, index) => {
-        const x = PAD + index * (rW + rGap);
-        const y = 2.4;
-        const diffColor =
-          item.difficulty === "high" ? LX.danger : item.difficulty === "low" ? LX.ok : LX.goldL;
-        const diffLabel =
-          item.difficulty === "high" ? "Alta" : item.difficulty === "low" ? "Baixa" : "Média";
-
-        panel(slide, { x, y, w: rW, h: rH, border: LX.goldSoft });
-        slide.addText(safeText(item.title) || "Item", {
-          x: x + 0.3,
-          y: y + 0.28,
-          w: rW - 0.6,
-          h: 0.6,
-          fontFace: BODY_FONT,
-          fontSize: 14,
-          bold: true,
-          color: LX.ink,
-        });
-        // Chips em pílula (dificuldade, categoria, ciclo) como no deck.
-        const chips = [
-          { label: `Dificuldade: ${diffLabel}`, color: diffColor },
-          ...(item.category ? [{ label: item.category, color: LX.blueL }] : []),
-          ...(item.cycleImplantation ? [{ label: `Ciclo: ${item.cycleImplantation}`, color: LX.muted }] : []),
-        ];
-        const chipH = 0.3;
-        const chipLeft = x + 0.3;
-        const chipMaxX = x + rW - 0.3;
-        let chipX = chipLeft;
-        let chipY = y + 0.92;
-        chips.forEach((chip) => {
-          const chipW = Math.min(0.075 * chip.label.length + 0.3, rW - 0.6);
-          if (chipX + chipW > chipMaxX) {
-            chipX = chipLeft;
-            chipY += chipH + 0.1;
-          }
-          slide.addShape(pptx.ShapeType.roundRect, {
-            x: chipX,
-            y: chipY,
-            w: chipW,
-            h: chipH,
-            fill: { color: LX.panel2 },
-            line: { color: chip.color, pt: 1 },
-            rectRadius: 0.5,
-          });
-          slide.addText(chip.label, {
-            x: chipX,
-            y: chipY,
-            w: chipW,
-            h: chipH,
-            align: "center",
-            valign: "middle",
-            fontFace: BODY_FONT,
-            fontSize: 8.5,
-            color: chip.color,
-          });
-          chipX += chipW + 0.1;
-        });
-
-        let cursorY = chipY + chipH + 0.18;
-        if (item.subtitle) {
-          slide.addText(item.subtitle, {
-            x: x + 0.3,
-            y: cursorY,
-            w: rW - 0.6,
-            h: 0.5,
-            fontFace: BODY_FONT,
-            fontSize: 10.5,
-            italic: true,
-            color: LX.muted,
-          });
-          cursorY += 0.55;
-        }
-        if (item.impact) {
-          slide.addText(`Impacto: ${item.impact}`, {
-            x: x + 0.3,
-            y: cursorY,
-            w: rW - 0.6,
-            h: Math.max(y + rH - 0.3 - cursorY, 0.5),
-            fontFace: BODY_FONT,
-            fontSize: 10.5,
-            color: LX.body,
-            valign: "top",
-          });
-        }
+  roadmapItems.forEach((item, index) => {
+    const slide = newSlide();
+    header(slide, { eyebrow: "Melhoria contínua", title: "Roadmap de Ações" });
+    if (roadmapItems.length > 1) {
+      slide.addText(`${index + 1}/${roadmapItems.length}`, {
+        x: SLIDE_W - PAD - 1,
+        y: 0.88,
+        w: 1,
+        h: 0.4,
+        align: "right",
+        fontFace: BODY_FONT,
+        fontSize: 11,
+        color: LX.dim,
       });
-      if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
-      footer(slide);
+    }
+
+    const rGap = 0.32;
+    const leftW = (CONTENT_W - rGap) * 0.55;
+    const rightW = CONTENT_W - rGap - leftW;
+    const rY = 2.3;
+    const rH = 2.75;
+
+    const diffColor =
+      item.difficulty === "high" ? LX.danger : item.difficulty === "low" ? LX.ok : LX.goldL;
+    const diffLabel =
+      item.difficulty === "high" ? "Alta" : item.difficulty === "low" ? "Baixa" : "Média";
+
+    // --- coluna esquerda: o item ---
+    panel(slide, { x: PAD, y: rY, w: leftW, h: rH, border: LX.goldSoft });
+    slide.addText(safeText(item.title) || "Item", {
+      x: PAD + 0.4,
+      y: rY + 0.32,
+      w: leftW - 0.8,
+      h: 0.6,
+      fontFace: TITLE_FONT,
+      fontSize: 24,
+      color: LX.ink,
     });
-  }
+    if (item.subtitle) {
+      slide.addText(item.subtitle, {
+        x: PAD + 0.4,
+        y: rY + 0.95,
+        w: leftW - 0.8,
+        h: 0.4,
+        fontFace: BODY_FONT,
+        fontSize: 13,
+        italic: true,
+        color: LX.muted,
+      });
+    }
+
+    const chips = [
+      { label: `Dificuldade: ${diffLabel}`, color: diffColor },
+      ...(item.category ? [{ label: item.category, color: LX.blueL }] : []),
+      ...(item.cycleImplantation ? [{ label: `Ciclo: ${item.cycleImplantation}`, color: LX.muted }] : []),
+    ];
+    const chipH = 0.34;
+    let chipX = PAD + 0.4;
+    let chipY = rY + 1.55;
+    chips.forEach((chip) => {
+      const chipW = Math.min(0.085 * chip.label.length + 0.34, leftW - 0.8);
+      if (chipX + chipW > PAD + leftW - 0.4) {
+        chipX = PAD + 0.4;
+        chipY += chipH + 0.12;
+      }
+      slide.addShape(pptx.ShapeType.roundRect, {
+        x: chipX,
+        y: chipY,
+        w: chipW,
+        h: chipH,
+        fill: { color: LX.panel2 },
+        line: { color: chip.color, pt: 0.75 },
+        rectRadius: 0.5,
+      });
+      slide.addText(chip.label, {
+        x: chipX,
+        y: chipY,
+        w: chipW,
+        h: chipH,
+        align: "center",
+        valign: "middle",
+        fontFace: BODY_FONT,
+        fontSize: 9.5,
+        color: chip.color,
+      });
+      chipX += chipW + 0.12;
+    });
+
+    // --- coluna direita: impacto esperado ---
+    panel(slide, {
+      x: PAD + leftW + rGap,
+      y: rY,
+      w: rightW,
+      h: rH,
+      fill: LX.deep,
+      border: LX.goldSoft,
+    });
+    const ix = PAD + leftW + rGap;
+    slide.addText("IMPACTO ESPERADO", {
+      x: ix + 0.4,
+      y: rY + 0.35,
+      w: rightW - 0.8,
+      h: 0.3,
+      fontFace: BODY_FONT,
+      fontSize: 11,
+      color: "C9D2FF",
+      charSpacing: 2,
+    });
+
+    // Destaca o percentual quando o texto de impacto traz um.
+    const pct = String(item.impact || "").match(/(\d{1,3})\s*%/);
+    let impactY = rY + 0.8;
+    if (pct) {
+      const reduction = /redu|queda|menos|diminu/i.test(item.impact) ? "-" : "";
+      slide.addText(`${reduction}${pct[1]}%`, {
+        x: ix + 0.4,
+        y: rY + 0.72,
+        w: rightW - 0.8,
+        h: 0.95,
+        fontFace: TITLE_FONT,
+        fontSize: 44,
+        color: LX.goldL,
+      });
+      impactY = rY + 1.72;
+    }
+    if (item.impact) {
+      slide.addText(safeText(item.impact), {
+        x: ix + 0.4,
+        y: impactY,
+        w: rightW - 0.8,
+        h: rY + rH - 0.35 - impactY,
+        fontFace: BODY_FONT,
+        fontSize: 12.5,
+        color: LX.body,
+        lineSpacingMultiple: 1.25,
+        valign: "top",
+      });
+    }
+
+    if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
+    footer(slide);
+  });
 
   // ---------- ENCERRAMENTO ----------
   const closing = newSlide();

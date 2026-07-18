@@ -339,6 +339,12 @@ export function useWeeklyReport() {
     const subtitle = String(draft.subtitle || "").trim().slice(0, 35);
     const impact = String(draft.impact || draft.benefit || "").trim().slice(0, 180);
     const benefit = impact;
+    // Destaque da Semana (antes -> depois) e fluxo atendido.
+    const isWeekHighlight = Boolean(draft.isWeekHighlight);
+    const beforeValue = String(draft.beforeValue || "").trim().slice(0, 40);
+    const afterValue = String(draft.afterValue || "").trim().slice(0, 40);
+    const highlightNote = String(draft.highlightNote || "").trim().slice(0, 160);
+    const flowText = String(draft.flowText || "").trim().slice(0, 120);
     const position = normalizePosition(draft.position, 1);
     if (!title || !activity) return false;
 
@@ -391,6 +397,11 @@ export function useWeeklyReport() {
                     benefit,
                     difficulty,
                     category,
+                    isWeekHighlight,
+                    beforeValue,
+                    afterValue,
+                    highlightNote,
+                    flowText,
                     position: nextPosition,
                   }
                 : item
@@ -420,6 +431,11 @@ export function useWeeklyReport() {
           benefit,
           difficulty,
           category,
+          isWeekHighlight,
+          beforeValue,
+          afterValue,
+          highlightNote,
+          flowText,
           position: nextPosition,
         };
 

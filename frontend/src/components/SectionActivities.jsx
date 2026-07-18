@@ -14,6 +14,7 @@ const CALLED_MIN = 4;
 const CALLED_MAX = 20;
 const BEFORE_AFTER_MAX = 40;
 const HIGHLIGHT_NOTE_MAX = 160;
+const FLOW_TEXT_MAX = 120;
 
 const EMPTY_DRAFT = {
   title: "",
@@ -31,6 +32,7 @@ const EMPTY_DRAFT = {
   beforeValue: "",
   afterValue: "",
   highlightNote: "",
+  flowText: "",
   position: 1,
 };
 const ENABLE_EXTRA_SHORTCUTS = true;
@@ -202,6 +204,7 @@ export default function SectionActivities({
       beforeValue: String(item.beforeValue || ""),
       afterValue: String(item.afterValue || ""),
       highlightNote: String(item.highlightNote || ""),
+      flowText: String(item.flowText || ""),
       position: Number(item.position || 1),
     });
     setShowComposer(true);
@@ -607,6 +610,22 @@ export default function SectionActivities({
                         placeholder="Somente se houver"
                       />
                       <small>{draft.highlight.length}/{HIGHLIGHT_MAX}</small>
+                    </label>
+                  ) : null}
+
+                  {!isRoadmapSection ? (
+                    <label>
+                      Fluxo Atendido (opcional)
+                      <input
+                        value={draft.flowText}
+                        maxLength={FLOW_TEXT_MAX}
+                        onChange={(event) => updateDraft("flowText", event.target.value, FLOW_TEXT_MAX)}
+                        placeholder="Ex.: Entrega → ICMS → Nota fiscal no portal"
+                      />
+                      <small>
+                        {(draft.flowText || "").length}/{FLOW_TEXT_MAX} · vira um card de destaque ao
+                        lado da atividade no PPT/PDF
+                      </small>
                     </label>
                   ) : null}
 

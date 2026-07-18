@@ -178,6 +178,8 @@ function normalizeSections(payload) {
         beforeValue: String(activity.beforeValue || "").trim().slice(0, 40),
         afterValue: String(activity.afterValue || "").trim().slice(0, 40),
         highlightNote: String(activity.highlightNote || "").trim().slice(0, 160),
+        // Fluxo atendido: vira um card de destaque ao lado da atividade.
+        flowText: String(activity.flowText || "").trim().slice(0, 120),
         difficulty: isRoadmapSectionName(section.name)
           ? sanitizeDifficulty(activity.difficulty) || "medium"
           : sanitizeDifficulty(activity.difficulty),
