@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 
 const weeklyReportsRouter = require("./routes/weeklyReports");
 const ticketsRouter = require("./routes/tickets");
+const { getSupabaseStatus } = require("./utils/supabaseClient");
 
 dotenv.config();
 
@@ -18,7 +19,13 @@ function createApp() {
   app.use(express.json({ limit: "1mb" }));
 
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, service: "performance-dashboard-backend" });
+    res.json({
+      ok: true,
+      service: "performance-dashboard-backend",
+      // Diagnóstico de configuração (nunca inclui o valor das chaves).
+      supabase: getSupabaseStatus(),
+      sultsTokenConfigurado: Boolean(process.env.SULTS_API_TOKEN),
+    });
   });
 
   app.use("/api", weeklyReportsRouter);

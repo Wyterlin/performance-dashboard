@@ -114,6 +114,48 @@ a:hover {
   color: var(--ink);
 }
 
+/* ---------- BARRAS DE ROLAGEM ---------- */
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--goldln) transparent;
+}
+
+/* Chromium / WebKit */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--panel2);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--goldln), rgba(43, 79, 216, 0.45));
+  border-radius: 999px;
+  /* A borda transparente “afina” o polegar sem encostar na pista. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--gold), var(--blue));
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Listas internas (modais, seletores) ficam com barra mais discreta. */
+.export-picker-list::-webkit-scrollbar,
+.manage-sections-list::-webkit-scrollbar,
+.activity-modal-fields::-webkit-scrollbar {
+  width: 8px;
+}
+
 /* ---------- APP LAYOUT ---------- */
 .app-layout {
   display: flex;
@@ -1390,55 +1432,21 @@ label small {
   color: var(--goldL);
 }
 
-/* ---------- CAMPO DE DURAÇÃO ---------- */
-.duration-field {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.duration-label {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.duration-inputs {
-  display: flex;
-  gap: 8px;
-}
-
-.duration-part {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-}
-
-.duration-part input {
-  width: 100%;
-  padding-right: 34px;
-  text-align: right;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-.duration-part input::-webkit-outer-spin-button,
-.duration-part input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.duration-unit {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 11px;
-  color: var(--dim);
-  pointer-events: none;
-}
-
+/* ---------- CAMPO DE DURAÇÃO (hh:mm:ss em campo único) ---------- */
 .duration-field small {
   color: var(--dim);
   font-size: 10px;
+}
+
+.duration-field input[type="time"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ícone nativo do seletor de hora legível no tema escuro. */
+:root[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator,
+:root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) opacity(0.55);
+  cursor: pointer;
 }
 
 /* ---------- FLUXO ATENDIDO ---------- */

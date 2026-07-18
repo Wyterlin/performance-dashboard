@@ -1,40 +1,22 @@
-import { DURATION_UNITS, formatDuration, parseDuration } from "../utils/duration";
+import { humanizeDuration, toClockValue } from "../utils/duration";
 
 /**
- * Campo de duração estruturado (h / min / s / ms) no lugar de texto livre.
- * Guarda uma string normalizada, ex.: "3h 20min" ou "1s 60ms", e reabre
- * corretamente valores antigos digitados à mão.
+ * Campo único de duração no formato HH:MM:SS (input nativo de hora, com
+ * segundos habilitados). Valores antigos em texto são convertidos ao abrir.
  */
-export default function DurationInput({ label, value, onChange, units = ["h", "min"], hint }) {
-  const parts = parseDuration(value);
-  const active = DURATION_UNITS.filter((unit) => units.includes(unit.key));
-
-  function handlePartChange(key, raw) {
-    const digits = String(raw || "").replace(/\D+/g, "").slice(0, 3);
-    onChange(formatDuration({ ...parts, [key]: digits }));
-  }
+export default function DurationInput({ label, value, onChange, hint }) {
+  const clock = toClockValue(value);
 
   return (
-    <div className="duration-field">
-      <span className="duration-label">{label}</span>
-      <div className="duration-inputs">
-        {active.map((unit) => (
-          <div className="duration-part" key={unit.key}>
-            <input
-              type="number"
-              min="0"
-              max={unit.max}
-              inputMode="numeric"
-              value={parts[unit.key] || ""}
-              onChange={(event) => handlePartChange(unit.key, event.target.value)}
-              aria-label={`${label} — ${unit.label}`}
-              placeholder="0"
-            />
-            <span className="duration-unit">{unit.label}</span>
-          </div>
-        ))}
-      </div>
-      <small>{hint || (value ? `Registrado: ${value}` : "Preencha ao menos um campo")}</small>
-    </div>
+    <label className="duration-field">
+      {label}
+      <input
+        type="time"
+        step="1"
+        value={clock}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <small>{hint || (clock ? `${humanizeDuration(clock)} (hh:mm:ss)` : "hh:mm:ss")}</small>
+    </label>
   );
 }

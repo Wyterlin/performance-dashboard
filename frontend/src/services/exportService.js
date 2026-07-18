@@ -970,6 +970,15 @@ function formatDurationPpt(milliseconds) {
 function parseDurationText(value) {
   const raw = String(value || "").toLowerCase().replace(/\s+/g, "");
   if (!raw) return null;
+
+  // Formato de relógio (hh:mm:ss ou mm:ss), usado pelos campos do site.
+  if (/^\d{1,3}(:\d{1,2}){1,2}$/.test(raw)) {
+    const parts = raw.split(":").map((part) => Number(part) || 0);
+    const seconds =
+      parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+    return seconds * 1000;
+  }
+
   const pattern = /(\d+(?:[.,]\d+)?)(ms|s|m|h|d)/g;
   let total = 0;
   let matched = false;
@@ -984,6 +993,24 @@ function parseDurationText(value) {
     match = pattern.exec(raw);
   }
   return matched ? total : null;
+}
+
+/** Duração curta preservando segundos/ms (o ganho costuma ser sub-minuto). */
+function formatShortDuration(milliseconds) {
+  const ms = Number(milliseconds);
+  if (!Number.isFinite(ms)) return "";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const totalSeconds = ms / 1000;
+  if (totalSeconds < 60) {
+    const rounded = Math.round(totalSeconds * 10) / 10;
+    return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.round(totalSeconds % 60);
+  if (minutes < 60) return seconds ? `${minutes}min ${seconds}s` : `${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes ? `${hours}h ${restMinutes}min` : `${hours}h`;
 }
 
 /** Atividades marcadas como Destaque da Semana, com o ganho já calculado. */
@@ -1005,8 +1032,9 @@ function collectWeekHighlights(sections = []) {
 
       items.push({
         title: safeText(activity.title) || "Destaque",
-        before,
-        after,
+        // Exibe legível ("50s") em vez do formato de relógio cru.
+        before: beforeMs != null ? formatShortDuration(beforeMs) : before,
+        after: afterMs != null ? formatShortDuration(afterMs) : after,
         note: safeText(activity.highlightNote),
         gainLabel,
       });

@@ -523,7 +523,7 @@ export default function SectionActivities({
                           Categoria
                           <select
                             value={draft.category}
-                            onChange={(event) => setDraft((prev) => ({ ...prev, category: event.target.value }))}
+                    onChange={(event) => setDraft((prev) => ({ ...prev, category: event.target.value }))}
                           >
                             <option value="Infraestrutura">Infraestrutura</option>
                             <option value="Dados">Dados</option>
@@ -536,7 +536,7 @@ export default function SectionActivities({
                         Dificuldade
                         <select
                           value={draft.difficulty}
-                          onChange={(event) => setDraft((prev) => ({ ...prev, difficulty: event.target.value }))}
+                    onChange={(event) => setDraft((prev) => ({ ...prev, difficulty: event.target.value }))}
                         >
                           <option value="low">Baixa</option>
                           <option value="medium">Média</option>
@@ -553,7 +553,7 @@ export default function SectionActivities({
                         inputMode="numeric"
                         pattern="[0-9]*"
                         value={draft.called}
-                        onChange={(event) => updateDraft("called", event.target.value, CALLED_MAX)}
+                    onChange={(event) => updateDraft("called", event.target.value, CALLED_MAX)}
                         placeholder="Ex.: 123456"
                       />
                       <small>{calledDigits.length}/{CALLED_MAX}</small>
@@ -584,7 +584,6 @@ export default function SectionActivities({
                   <DurationInput
                     label="Tempo de Ciclo (Cycle Time)"
                     value={draft.cycleTime}
-                    units={["h", "min"]}
                     onChange={(next) => setDraft((prev) => ({ ...prev, cycleTime: next }))}
                   />
 
@@ -643,16 +642,14 @@ export default function SectionActivities({
                             <DurationInput
                               label="Antes"
                               value={draft.beforeValue}
-                              units={["min", "s", "ms"]}
-                              onChange={(next) =>
+                    onChange={(next) =>
                                 setDraft((prev) => ({ ...prev, beforeValue: next }))
                               }
                             />
                             <DurationInput
                               label="Depois"
                               value={draft.afterValue}
-                              units={["min", "s", "ms"]}
-                              onChange={(next) =>
+                    onChange={(next) =>
                                 setDraft((prev) => ({ ...prev, afterValue: next }))
                               }
                             />
@@ -682,7 +679,7 @@ export default function SectionActivities({
                       type="number"
                       min="1"
                       value={draft.position}
-                      onChange={(event) =>
+                    onChange={(event) =>
                         setDraft((prev) => ({ ...prev, position: Number(event.target.value || 1) }))
                       }
                     />
