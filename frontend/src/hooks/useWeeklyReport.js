@@ -176,6 +176,17 @@ export function useWeeklyReport() {
         benefit: activity.benefit || activity.activity || "",
         difficulty: activity.difficulty || "",
         category: activity.category || "",
+        // Destaque da Semana e Fluxo Atendido precisam sobreviver ao reload.
+        isWeekHighlight: Boolean(activity.isWeekHighlight),
+        beforeValue: activity.beforeValue || "",
+        afterValue: activity.afterValue || "",
+        highlightNote: activity.highlightNote || "",
+        flowSteps: Array.isArray(activity.flowSteps)
+          ? activity.flowSteps
+          : String(activity.flowText || "")
+              .split("→")
+              .map((step) => step.trim())
+              .filter(Boolean),
         position: normalizePosition(activity.position, activityIndex + 1),
       })),
     }));
@@ -344,7 +355,10 @@ export function useWeeklyReport() {
     const beforeValue = String(draft.beforeValue || "").trim().slice(0, 40);
     const afterValue = String(draft.afterValue || "").trim().slice(0, 40);
     const highlightNote = String(draft.highlightNote || "").trim().slice(0, 160);
-    const flowText = String(draft.flowText || "").trim().slice(0, 120);
+    const flowSteps = (Array.isArray(draft.flowSteps) ? draft.flowSteps : [])
+      .map((step) => String(step || "").trim().slice(0, 40))
+      .filter(Boolean)
+      .slice(0, 6);
     const position = normalizePosition(draft.position, 1);
     if (!title || !activity) return false;
 
@@ -401,7 +415,7 @@ export function useWeeklyReport() {
                     beforeValue,
                     afterValue,
                     highlightNote,
-                    flowText,
+                    flowSteps,
                     position: nextPosition,
                   }
                 : item
@@ -435,7 +449,7 @@ export function useWeeklyReport() {
           beforeValue,
           afterValue,
           highlightNote,
-          flowText,
+          flowSteps,
           position: nextPosition,
         };
 

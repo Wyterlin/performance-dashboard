@@ -1390,6 +1390,128 @@ label small {
   color: var(--goldL);
 }
 
+/* ---------- CAMPO DE DURAÇÃO ---------- */
+.duration-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.duration-label {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.duration-inputs {
+  display: flex;
+  gap: 8px;
+}
+
+.duration-part {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.duration-part input {
+  width: 100%;
+  padding-right: 34px;
+  text-align: right;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.duration-part input::-webkit-outer-spin-button,
+.duration-part input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.duration-unit {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--dim);
+  pointer-events: none;
+}
+
+.duration-field small {
+  color: var(--dim);
+  font-size: 10px;
+}
+
+/* ---------- FLUXO ATENDIDO ---------- */
+.flow-steps {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.flow-steps-label {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.flow-steps-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.flow-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.flow-step-arrow {
+  color: var(--gold);
+  font-size: 14px;
+  flex: none;
+}
+
+.flow-step-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.flow-step-field input {
+  width: 100%;
+  padding-right: 28px;
+}
+
+.flow-step-remove {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--dim);
+  font-size: 10px;
+  display: grid;
+  place-items: center;
+}
+
+.flow-step-remove:hover {
+  color: var(--danger);
+  filter: none;
+}
+
+.flow-steps small {
+  color: var(--dim);
+  font-size: 10px;
+}
+
 /* ---------- DESTAQUE DA SEMANA ---------- */
 .week-highlight-block {
   display: grid;

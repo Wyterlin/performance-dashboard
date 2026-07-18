@@ -178,8 +178,16 @@ function normalizeSections(payload) {
         beforeValue: String(activity.beforeValue || "").trim().slice(0, 40),
         afterValue: String(activity.afterValue || "").trim().slice(0, 40),
         highlightNote: String(activity.highlightNote || "").trim().slice(0, 160),
-        // Fluxo atendido: vira um card de destaque ao lado da atividade.
-        flowText: String(activity.flowText || "").trim().slice(0, 120),
+        // Fluxo atendido: etapas encadeadas (a seta é adicionada na exportação).
+        flowSteps: (Array.isArray(activity.flowSteps)
+          ? activity.flowSteps
+          : String(activity.flowText || "")
+              .split("→")
+              .map((step) => step.trim())
+        )
+          .map((step) => String(step || "").trim().slice(0, 40))
+          .filter(Boolean)
+          .slice(0, 6),
         difficulty: isRoadmapSectionName(section.name)
           ? sanitizeDifficulty(activity.difficulty) || "medium"
           : sanitizeDifficulty(activity.difficulty),

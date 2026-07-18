@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import DurationInput from "./DurationInput";
+import FlowStepsInput from "./FlowStepsInput";
 
 const TITLE_MAX = 120;
 const ROADMAP_TITLE_MAX = 35;
@@ -32,7 +34,7 @@ const EMPTY_DRAFT = {
   beforeValue: "",
   afterValue: "",
   highlightNote: "",
-  flowText: "",
+  flowSteps: [],
   position: 1,
 };
 const ENABLE_EXTRA_SHORTCUTS = true;
@@ -204,7 +206,13 @@ export default function SectionActivities({
       beforeValue: String(item.beforeValue || ""),
       afterValue: String(item.afterValue || ""),
       highlightNote: String(item.highlightNote || ""),
-      flowText: String(item.flowText || ""),
+      // Compatibilidade: registros antigos guardavam o fluxo como texto único.
+      flowSteps: Array.isArray(item.flowSteps)
+        ? item.flowSteps
+        : String(item.flowText || "")
+            .split("→")
+            .map((step) => step.trim())
+            .filter(Boolean),
       position: Number(item.position || 1),
     });
     setShowComposer(true);
@@ -573,16 +581,12 @@ export default function SectionActivities({
                     </label>
                   ) : null}
 
-                  <label>
-                    Tempo de Ciclo (Cycle Time)
-                    <input
-                      value={draft.cycleTime}
-                      maxLength={CYCLE_TIME_MAX}
-                      onChange={(event) => updateDraft("cycleTime", event.target.value, CYCLE_TIME_MAX)}
-                      placeholder="Ex.: 3h 20m"
-                    />
-                    <small>{draft.cycleTime.length}/{CYCLE_TIME_MAX}</small>
-                  </label>
+                  <DurationInput
+                    label="Tempo de Ciclo (Cycle Time)"
+                    value={draft.cycleTime}
+                    units={["h", "min"]}
+                    onChange={(next) => setDraft((prev) => ({ ...prev, cycleTime: next }))}
+                  />
 
                   <label>
                     Equipe do Projeto
@@ -614,19 +618,10 @@ export default function SectionActivities({
                   ) : null}
 
                   {!isRoadmapSection ? (
-                    <label>
-                      Fluxo Atendido (opcional)
-                      <input
-                        value={draft.flowText}
-                        maxLength={FLOW_TEXT_MAX}
-                        onChange={(event) => updateDraft("flowText", event.target.value, FLOW_TEXT_MAX)}
-                        placeholder="Ex.: Entrega → ICMS → Nota fiscal no portal"
-                      />
-                      <small>
-                        {(draft.flowText || "").length}/{FLOW_TEXT_MAX} · vira um card de destaque ao
-                        lado da atividade no PPT/PDF
-                      </small>
-                    </label>
+                    <FlowStepsInput
+                      steps={draft.flowSteps}
+                      onChange={(steps) => setDraft((prev) => ({ ...prev, flowSteps: steps }))}
+                    />
                   ) : null}
 
                   {!isRoadmapSection ? (
@@ -645,28 +640,22 @@ export default function SectionActivities({
                       {draft.isWeekHighlight ? (
                         <>
                           <div className="roadmap-input-grid">
-                            <label>
-                              Antes
-                              <input
-                                value={draft.beforeValue}
-                                maxLength={BEFORE_AFTER_MAX}
-                                onChange={(event) =>
-                                  updateDraft("beforeValue", event.target.value, BEFORE_AFTER_MAX)
-                                }
-                                placeholder="Ex.: 50s"
-                              />
-                            </label>
-                            <label>
-                              Depois
-                              <input
-                                value={draft.afterValue}
-                                maxLength={BEFORE_AFTER_MAX}
-                                onChange={(event) =>
-                                  updateDraft("afterValue", event.target.value, BEFORE_AFTER_MAX)
-                                }
-                                placeholder="Ex.: 1s60ms"
-                              />
-                            </label>
+                            <DurationInput
+                              label="Antes"
+                              value={draft.beforeValue}
+                              units={["min", "s", "ms"]}
+                              onChange={(next) =>
+                                setDraft((prev) => ({ ...prev, beforeValue: next }))
+                              }
+                            />
+                            <DurationInput
+                              label="Depois"
+                              value={draft.afterValue}
+                              units={["min", "s", "ms"]}
+                              onChange={(next) =>
+                                setDraft((prev) => ({ ...prev, afterValue: next }))
+                              }
+                            />
                           </div>
                           <label>
                             Observação do ganho (opcional)

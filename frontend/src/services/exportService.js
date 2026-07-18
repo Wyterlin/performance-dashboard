@@ -421,11 +421,20 @@ export async function exportDashboardPdf({
   });
 
   let started = false;
-  function newPage() {
+  function newPage(variant = "content") {
     if (started) doc.addPage();
     started = true;
     setFillFromHex(doc, LX.bg);
     doc.rect(0, 0, W, H, "F");
+    // Mesmo glow do PPT, como imagem de fundo.
+    const glow = makeGlowBackground(variant);
+    if (glow) {
+      try {
+        doc.addImage(`data:${glow}`, "PNG", 0, 0, W, H);
+      } catch {
+        // Sem glow se o navegador recusar a imagem.
+      }
+    }
     if (watermarkEnabled) {
       setTextFromHex(doc, LX.line);
       doc.setFont(SANS, "bold");
@@ -473,7 +482,7 @@ export async function exportDashboardPdf({
   }
 
   // ---------- 1. CAPA ----------
-  newPage();
+  newPage("cover");
   setTextFromHex(doc, LX.gold);
   doc.setFont(SANS, "bold");
   doc.setFontSize(10);
@@ -662,7 +671,8 @@ export async function exportDashboardPdf({
   }
 
   // ---------- DESTAQUE DA SEMANA ----------
-  collectWeekHighlights(sections).forEach((item) => {
+  // Renderizado depois das seções, logo antes do roadmap.
+  const renderWeekHighlightPages = () => collectWeekHighlights(sections).forEach((item) => {
     newPage();
     setTextFromHex(doc, LX.gold);
     doc.setFont(SANS, "bold");
@@ -795,6 +805,9 @@ export async function exportDashboardPdf({
     });
   });
 
+  // Ganho de Performance entra aqui: depois de todas as atividades.
+  renderWeekHighlightPages();
+
   // ---------- ROADMAP ----------
   const roadmapItems = roadmapItemsFromSections(sections);
   if (roadmapItems.length) {
@@ -874,7 +887,7 @@ export async function exportDashboardPdf({
   }
 
   // ---------- ENCERRAMENTO ----------
-  newPage();
+  newPage("closing");
   setTextFromHex(doc, LX.gold);
   doc.setFont(SANS, "bold");
   doc.setFontSize(10);
@@ -1002,6 +1015,75 @@ function collectWeekHighlights(sections = []) {
   return items;
 }
 
+/**
+ * Gera o "glow" de fundo (gradiente radial azul) como PNG via canvas.
+ * PPT/PDF não têm gradiente radial nativo, então usamos uma imagem de fundo.
+ * Retorna null fora do navegador (ex.: testes em Node) — aí fica só o sólido.
+ */
+const glowCache = {};
+function makeGlowBackground(variant = "content") {
+  if (glowCache[variant] !== undefined) return glowCache[variant];
+  if (typeof document === "undefined") {
+    glowCache[variant] = null;
+    return null;
+  }
+  try {
+    const w = 1600;
+    const h = 900;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      glowCache[variant] = null;
+      return null;
+    }
+
+    ctx.fillStyle = `#${LX.bg}`;
+    ctx.fillRect(0, 0, w, h);
+
+    // Cada variante posiciona o brilho como no deck.
+    const spots =
+      variant === "cover"
+        ? [
+            { x: w * 0.5, y: -h * 0.12, r: w * 0.62, color: "43,79,216", alpha: 0.5 },
+            { x: w * 0.88, y: h * 0.3, r: w * 0.36, color: "212,175,55", alpha: 0.08 },
+          ]
+        : variant === "closing"
+          ? [{ x: w * 0.5, y: h * 1.05, r: w * 0.6, color: "43,79,216", alpha: 0.42 }]
+          : [{ x: w * 0.85, y: -h * 0.1, r: w * 0.55, color: "43,79,216", alpha: 0.22 }];
+
+    spots.forEach((spot) => {
+      const gradient = ctx.createRadialGradient(spot.x, spot.y, 0, spot.x, spot.y, spot.r);
+      gradient.addColorStop(0, `rgba(${spot.color},${spot.alpha})`);
+      gradient.addColorStop(1, `rgba(${spot.color},0)`);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, w, h);
+    });
+
+    // pptxgenjs espera "image/png;base64,..." (sem o prefixo "data:").
+    const dataUrl = canvas.toDataURL("image/png");
+    glowCache[variant] = dataUrl.replace(/^data:/, "");
+    return glowCache[variant];
+  } catch {
+    glowCache[variant] = null;
+    return null;
+  }
+}
+
+/** Junta as etapas do Fluxo Atendido com a seta padrão. */
+function flowStepsText(activity) {
+  const steps = Array.isArray(activity?.flowSteps)
+    ? activity.flowSteps
+    : String(activity?.flowText || "")
+        .split("→")
+        .map((step) => step.trim());
+  return steps
+    .map((step) => safeText(step))
+    .filter(Boolean)
+    .join("  →  ");
+}
+
 function chunkList(items, size) {
   const pages = [];
   for (let i = 0; i < items.length; i += size) pages.push(items.slice(i, i + size));
@@ -1038,9 +1120,10 @@ export async function exportDashboardPptx({
   const metrics = ticketSummary?.metrics || null;
 
   // ---------- helpers de desenho ----------
-  function newSlide() {
+  function newSlide(variant = "content") {
     const slide = pptx.addSlide();
-    slide.background = { color: LX.bg };
+    const glow = makeGlowBackground(variant);
+    slide.background = glow ? { data: glow } : { color: LX.bg };
     return slide;
   }
 
@@ -1112,7 +1195,7 @@ export async function exportDashboardPptx({
   }
 
   // ---------- 1. CAPA ----------
-  const cover = newSlide();
+  const cover = newSlide("cover");
   cover.addText("RELATÓRIO SEMANAL", {
     x: 0,
     y: 2.15,
@@ -1400,8 +1483,9 @@ export async function exportDashboardPptx({
   }
 
   // ---------- DESTAQUE DA SEMANA (antes -> depois) ----------
+  // Renderizado depois das seções de atividades, logo antes do roadmap.
   const weekHighlights = collectWeekHighlights(sections);
-  weekHighlights.forEach((item) => {
+  const renderWeekHighlightSlides = () => weekHighlights.forEach((item) => {
     const slide = newSlide();
     slide.addText(`DESTAQUE DA SEMANA · ${safeText(item.title).toUpperCase()}`, {
       x: 0,
@@ -1523,7 +1607,7 @@ export async function exportDashboardPptx({
     footer(slide);
   });
 
-  // ---------- 5..N. SEÇÕES DE ATIVIDADES ----------
+  // ---------- SEÇÕES DE ATIVIDADES ----------
   const populatedSections = (sections || []).filter(
     (section) =>
       !isRoadmapSectionName(section?.name) &&
@@ -1631,8 +1715,8 @@ export async function exportDashboardPptx({
     const activities = sortActivitiesByPosition(section.activities || []);
     const number = String(sectionIndex + 1).padStart(2, "0");
     // Atividades com "Fluxo Atendido" ganham slide próprio, ao lado do card.
-    const withFlow = activities.filter((item) => safeText(item?.flowText));
-    const withoutFlow = activities.filter((item) => !safeText(item?.flowText));
+    const withFlow = activities.filter((item) => flowStepsText(item));
+    const withoutFlow = activities.filter((item) => !flowStepsText(item));
     const pages = chunkList(withoutFlow, 4);
     const totalSlides = pages.length + withFlow.length;
     let slideNo = 0;
@@ -1693,13 +1777,16 @@ export async function exportDashboardPptx({
         w: rightW,
         h: fH,
         label: "Fluxo atendido",
-        value: activity.flowText,
+        value: flowStepsText(activity),
       });
 
       if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
       footer(slide);
     });
   });
+
+  // Ganho de Performance entra aqui: depois de todas as atividades.
+  renderWeekHighlightSlides();
 
   // ---------- ROADMAP ----------
   // Um item por slide, em 2 colunas: card do item + card de impacto (como no deck).
@@ -1848,7 +1935,7 @@ export async function exportDashboardPptx({
   });
 
   // ---------- ENCERRAMENTO ----------
-  const closing = newSlide();
+  const closing = newSlide("closing");
   closing.addText(`RELATÓRIO SEMANAL · ${formatPeriodPpt(startDate, endDate)}`, {
     x: 0,
     y: 2.75,
