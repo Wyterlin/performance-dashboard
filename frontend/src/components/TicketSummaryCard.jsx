@@ -22,7 +22,9 @@ export default function TicketSummaryCard({ summary, loading, error, onRefresh }
     <article className="ticket-card">
       <div className="ticket-card-header">
         <div>
-          <h3>Chamados (SULTS)</h3>
+          <h3>
+            Chamados <span className="ticket-brand">SULTS</span>
+          </h3>
         </div>
         <button type="button" onClick={onRefresh} disabled={loading}>
           {loading ? "Atualizando..." : "Atualizar"}

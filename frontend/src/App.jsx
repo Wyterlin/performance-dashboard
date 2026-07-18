@@ -280,104 +280,106 @@ export default function App() {
 
       <div className="main-area">
         <main className="page-shell">
-          <section id="sec-overview" className="hero-panel">
-            <div>
+          <header id="sec-overview" className="hero-panel">
+            <div className="hero-heading">
               <p className="eyebrow">Relatório Semanal</p>
               <h1>Apresentação de Atividades</h1>
-              <p>
-                Central de inteligência operacional dedicada ao rastreamento de atividades e métricas de desempenho, com sincronização nativa de dados de suporte.
+              <p className="hero-sub">
+                Central de inteligência operacional · sincronização nativa com SULTS
               </p>
             </div>
 
-            <div className="hero-controls">
-              <div className="hero-controls-top">
-                <button
-                  type="button"
-                  className="secondary-button theme-toggle"
-                  onClick={toggleTheme}
-                  aria-label="Alternar tema claro e escuro"
-                >
-                  {theme === "dark" ? "☀ Tema claro" : "☾ Tema escuro"}
-                </button>
-                <details ref={exportMenuRef} className="export-menu">
-                  <summary title="Exportações" aria-label="Exportações">
-                    ⁝
-                  </summary>
-                  <div className="export-menu-panel">
-                    <button type="button" className="secondary-button" onClick={handleExportPdf}>
-                      Exportar PDF
-                    </button>
-                    <button type="button" className="secondary-button" onClick={handleExportPptx}>
-                      Exportar PowerPoint
-                    </button>
-                    <button type="button" className="secondary-button" onClick={handleOpenHistory}>
-                      Log de Modificações
-                    </button>
-                  </div>
-                </details>
-              </div>
-
-              <div className="date-range-controls date-range-centered">
-                <label>
-                  Data inicial
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(event) => setStartDate(event.target.value)}
-                  />
-                </label>
-                <label>
-                  Data final
-                  <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-                </label>
-              </div>
-
-              {isRangeInvalid ? (
-                <p className="alert-error">Periodo invalido: a data inicial deve ser menor ou igual a final.</p>
-              ) : null}
-
-              <div className="search-row-centered">
-                <button
-                  type="button"
-                  onClick={loadPeriodData}
-                  disabled={ticketLoading || loadingReport || isRangeInvalid}
-                >
-                  {ticketLoading || loadingReport ? "Buscando..." : "Buscar Periodo"}
-                </button>
-              </div>
+            <div className="hero-actions">
+              <button
+                type="button"
+                className="secondary-button theme-toggle"
+                onClick={toggleTheme}
+                aria-label="Alternar tema claro e escuro"
+              >
+                {theme === "dark" ? "☀ Tema claro" : "☾ Tema escuro"}
+              </button>
+              <details ref={exportMenuRef} className="export-menu">
+                <summary className="export-summary" title="Exportações" aria-label="Exportações">
+                  Exportar ▾
+                </summary>
+                <div className="export-menu-panel">
+                  <button type="button" className="secondary-button" onClick={handleExportPdf}>
+                    Exportar PDF
+                  </button>
+                  <button type="button" className="secondary-button" onClick={handleExportPptx}>
+                    Exportar PowerPoint
+                  </button>
+                  <button type="button" className="secondary-button" onClick={handleOpenHistory}>
+                    Log de Modificações
+                  </button>
+                </div>
+              </details>
             </div>
+          </header>
+
+          <section className="period-panel" aria-label="Período do relatório">
+            <label className="period-field">
+              Data inicial
+              <input
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </label>
+            <label className="period-field">
+              Data final
+              <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+            </label>
+            <button
+              type="button"
+              className="period-search"
+              onClick={loadPeriodData}
+              disabled={ticketLoading || loadingReport || isRangeInvalid}
+            >
+              {ticketLoading || loadingReport ? "Buscando..." : "Buscar Período"}
+            </button>
           </section>
+
+          {isRangeInvalid ? (
+            <p className="alert-error">Período inválido: a data inicial deve ser menor ou igual à final.</p>
+          ) : null}
 
           <section id="sec-indicators" className="kpi-strip" aria-label="Indicadores principais">
             <article className="kpi-item kpi-item-highlight">
-              <span>Indicador Consolidado de Performance</span>
+              <span>Indicador Consolidado</span>
               <strong>{highlightedKpiTotal}</strong>
+              <span className="kpi-sub">chamados + atividades no período</span>
             </article>
 
             <article className="kpi-item">
               <span>Volume Operacional</span>
               <strong>{operationalTotal}</strong>
+              <i className="kpi-accent kpi-accent-blue" aria-hidden="true" />
             </article>
 
             <article className="kpi-item">
-              <span>Total de Chamados com Repactuacao de Prazos</span>
+              <span>Repactuação de Prazos</span>
               <strong>{repactTotal}</strong>
+              <i className="kpi-accent kpi-accent-gold" aria-hidden="true" />
             </article>
 
-            <article className="kpi-item kpi-item-manual">
-              <span className="kpi-manual-label">Atividades sem chamado</span>
-              <span className="kpi-manual-section">Pendentes de vinculação</span>
+            <article className="kpi-item">
+              <span>Atividades sem chamado</span>
               <strong>{dataQuality.withoutCalled}</strong>
+              <i className="kpi-accent kpi-accent-blue" aria-hidden="true" />
             </article>
-
-            {sectionKpis.map((kpi) => (
-              <article key={kpi.name} className="kpi-item kpi-item-manual">
-                <span className="kpi-manual-label">Total de Atividades</span>
-                <span className="kpi-manual-section">{kpi.name}</span>
-                <strong>{kpi.total}</strong>
-              </article>
-            ))}
           </section>
+
+          {sectionKpis.length ? (
+            <section className="section-kpi-strip" aria-label="Totais por seção">
+              {sectionKpis.map((kpi) => (
+                <article key={kpi.name} className="section-kpi">
+                  <span>{kpi.name}</span>
+                  <strong>{kpi.total}</strong>
+                </article>
+              ))}
+            </section>
+          ) : null}
 
           <section id="sec-tickets" className="grid-layout">
             <TicketSummaryCard
