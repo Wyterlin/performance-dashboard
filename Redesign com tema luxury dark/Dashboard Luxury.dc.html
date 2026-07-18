@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Sora,sans-serif;background:var(--bg);
+--bg:#07080d;--side:#0a0c14;--panel:#0d0f18;--panel2:#0a0d16;--surface:#10131f;
+--line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.06);
+--gold:#d4af37;--goldL:#e8c96a;--goldln:rgba(212,175,55,.35);--goldbg:rgba(212,175,55,.06);
+--blue:#2b4fd8;--blueL:#5a7bff;--blueln:rgba(43,79,216,.4);--bluebg:rgba(43,79,216,.08);
+--ink:#ffffff;--body-c:#e9ebf2;--muted:#9aa1b5;--dim:#6d7488;
+--glow:radial-gradient(900px 400px at 85% -10%,rgba(43,79,216,.22),transparent 60%);
+--shadow:0 10px 34px rgba(0,0,0,.45);--modalbg:rgba(4,5,9,.72)}
+body[data-theme="light"]{--bg:#efece5;--side:#faf8f3;--panel:#ffffff;--panel2:#faf9f5;--surface:#f4f2ec;
+--line:rgba(16,19,31,.12);--line2:rgba(16,19,31,.08);
+--gold:#a8842c;--goldL:#8a6a1c;--goldln:rgba(168,132,44,.45);--goldbg:rgba(168,132,44,.07);
+--blue:#1e3fbf;--blueL:#1e3fbf;--blueln:rgba(30,63,191,.35);--bluebg:rgba(30,63,191,.06);
+--ink:#10131f;--body-c:#232838;--muted:#5a6172;--dim:#8a8f9e;
+--glow:radial-gradient(900px 400px at 85% -10%,rgba(30,63,191,.1),transparent 60%);
+--shadow:0 10px 30px rgba(16,19,31,.12);--modalbg:rgba(16,19,31,.45)}
+a{color:var(--goldL);text-decoration:none}a:hover{color:var(--ink)}
+input,select,textarea{font-family:Sora,sans-serif;background:var(--surface);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:9px 12px;font-size:13px;outline:none;width:100%;box-sizing:border-box}
+input:focus,select:focus,textarea:focus{border-color:var(--blueln);box-shadow:0 0 0 3px rgba(43,79,216,.18)}
+button{font-family:Sora,sans-serif;cursor:pointer}
+::placeholder{color:var(--dim)}
+@keyframes riseIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+</style>
+</helmet>
+<div style="display:flex;height:100vh;color:var(--body-c)" data-screen-label="Dashboard">
+  <!-- SIDEBAR -->
+  <aside style="width:224px;flex:none;background:var(--side);border-right:1px solid var(--goldln);display:flex;flex-direction:column;padding:24px 0">
+    <div style="padding:0 22px 20px;border-bottom:1px solid var(--line2)">
+      <div style="font-family:'Playfair Display',serif;font-size:20px;letter-spacing:.04em;color:var(--ink)">Performance</div>
+      <div style="font-size:10px;letter-spacing:.34em;color:var(--gold);margin-top:3px;font-weight:600">DASHBOARD</div>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:2px;padding:16px 12px">
+      <sc-for list="{{ navItems }}" as="nav" hint-placeholder-count="5">
+        <button type="button" onClick="{{ nav.go }}" style="{{ nav.style }}" style-hover="color:var(--ink)">
+          <span style="width:16px;text-align:center">{{ nav.icon }}</span>{{ nav.label }}
+        </button>
+      </sc-for>
+    </nav>
+    <div style="margin-top:auto;padding:16px 22px;border-top:1px solid var(--line2)">
+      <div style="font-size:11px;color:var(--dim)">{{ autosaveTitle }}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:6px"><span style="width:7px;height:7px;border-radius:50%;background:var(--gold)"></span><span style="font-size:11px;color:var(--goldL)">{{ autosaveLabel }}</span></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main ref="{{ mainRef }}" style="flex:1;overflow-y:auto;background:var(--glow),var(--bg)">
+    <div style="max-width:1180px;margin:0 auto;padding:28px 32px 40px">
+
+      <!-- HERO -->
+      <header id="sec-overview" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;animation:riseIn .6s ease both">
+        <div>
+          <div style="font-size:10px;letter-spacing:.32em;color:var(--gold);font-weight:600">RELATÓRIO SEMANAL</div>
+          <h1 style="font-family:'Playfair Display',serif;font-size:38px;font-weight:600;color:var(--ink);margin:6px 0 0">Apresentação de Atividades</h1>
+          <p style="font-size:13px;color:var(--muted);margin:6px 0 0;font-weight:300">Central de inteligência operacional · sincronização nativa com SULTS</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;position:relative">
+          <button type="button" onClick="{{ toggleTheme }}" style="padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12px" style-hover="border-color:var(--goldln);color:var(--goldL)">{{ themeLabel }}</button>
+          <button type="button" onClick="{{ toggleExport }}" style="padding:10px 16px;border-radius:8px;border:1px solid var(--goldln);background:var(--goldbg);color:var(--goldL);font-size:12px;font-weight:600">Exportar ▾</button>
+          <sc-if value="{{ exportOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:fixed;inset:0;z-index:40" onClick="{{ closeExport }}"></div>
+            <div style="position:absolute;right:0;top:calc(100% + 8px);min-width:230px;display:grid;gap:4px;background:var(--panel);border:1px solid var(--goldln);border-radius:12px;box-shadow:var(--shadow);padding:8px;z-index:41;animation:fadeIn .15s ease">
+              <button type="button" onClick="{{ exportPdf }}" style="text-align:left;padding:10px 12px;border:none;border-radius:8px;background:transparent;color:var(--body-c);font-size:12.5px" style-hover="background:var(--bluebg)">Exportar PDF</button>
+              <button type="button" onClick="{{ exportPptx }}" style="text-align:left;padding:10px 12px;border:none;border-radius:8px;background:transparent;color:var(--body-c);font-size:12.5px" style-hover="background:var(--bluebg)">Exportar PowerPoint</button>
+              <button type="button" onClick="{{ openHistory }}" style="text-align:left;padding:10px 12px;border:none;border-radius:8px;background:transparent;color:var(--body-c);font-size:12.5px" style-hover="background:var(--bluebg)">Log de Modificações</button>
+            </div>
+          </sc-if>
+        </div>
+      </header>
+
+      <!-- PERIOD BAR -->
+      <div style="display:flex;gap:12px;align-items:flex-end;margin-top:22px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;animation:riseIn .6s .05s ease both">
+        <label style="flex:1;font-size:11px;color:var(--muted);display:grid;gap:6px">Data inicial
+          <input type="date" value="{{ startDate }}" onChange="{{ onStartDate }}">
+        </label>
+        <label style="flex:1;font-size:11px;color:var(--muted);display:grid;gap:6px">Data final
+          <input type="date" value="{{ endDate }}" onChange="{{ onEndDate }}">
+        </label>
+        <button type="button" onClick="{{ buscarPeriodo }}" style="padding:11px 22px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--blue),#1c34a0);color:#fff;font-size:12.5px;font-weight:600;box-shadow:0 6px 18px rgba(43,79,216,.35)" style-hover="filter:brightness(1.15)">{{ buscarLabel }}</button>
+      </div>
+      <sc-if value="{{ rangeInvalid }}" hint-placeholder-val="{{ false }}">
+        <p style="margin:10px 0 0;font-size:12px;color:#ff6b78">Período inválido: a data inicial deve ser menor ou igual à final.</p>
+      </sc-if>
+
+      <!-- KPIS -->
+      <section style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:12px;margin-top:18px;animation:riseIn .6s .1s ease both" aria-label="Indicadores principais">
+        <article style="background:linear-gradient(140deg,#16225c,#0d1330);border:1px solid var(--goldln);border-radius:14px;padding:18px 20px">
+          <div style="font-size:11px;letter-spacing:.14em;color:#c9d2ff">INDICADOR CONSOLIDADO</div>
+          <div style="font-family:'Playfair Display',serif;font-size:46px;color:#e8c96a;line-height:1;margin-top:10px">{{ kpiConsolidado }}</div>
+          <div style="font-size:11px;color:#8d97c8;margin-top:8px">chamados + atividades no período</div>
+        </article>
+        <article style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px"><div style="font-size:11px;color:var(--muted)">Volume Operacional</div><div style="font-size:30px;font-weight:600;color:var(--ink);margin-top:12px">{{ kpiOperacional }}</div><div style="width:36px;height:2px;background:var(--blue);margin-top:10px"></div></article>
+        <article style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px"><div style="font-size:11px;color:var(--muted)">Repactuação de Prazos</div><div style="font-size:30px;font-weight:600;color:var(--ink);margin-top:12px">{{ kpiRepact }}</div><div style="width:36px;height:2px;background:var(--gold);margin-top:10px"></div></article>
+        <article style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px"><div style="font-size:11px;color:var(--muted)">Atividades sem chamado</div><div style="font-size:30px;font-weight:600;color:var(--ink);margin-top:12px">{{ kpiSemChamado }}</div><div style="width:36px;height:2px;background:var(--blue);margin-top:10px"></div></article>
+      </section>
+      <section style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:10px">
+        <sc-for list="{{ sectionKpis }}" as="kpi" hint-placeholder-count="3">
+          <article style="background:var(--panel2);border:1px solid var(--line2);border-radius:12px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <div style="font-size:11px;color:var(--muted);line-height:1.3">{{ kpi.name }}</div>
+            <div style="font-family:'Playfair Display',serif;font-size:24px;color:var(--goldL)">{{ kpi.total }}</div>
+          </article>
+        </sc-for>
+      </section>
+
+      <!-- TICKETS -->
+      <section id="sec-tickets" style="margin-top:22px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;animation:riseIn .6s .15s ease both">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h2 style="font-family:'Playfair Display',serif;font-size:19px;font-weight:600;color:var(--ink);margin:0">Chamados <span style="color:var(--gold)">SULTS</span></h2>
+          <button type="button" onClick="{{ buscarPeriodo }}" style="font-size:11px;color:var(--blueL);border:1px solid var(--blueln);background:transparent;padding:6px 14px;border-radius:999px" style-hover="background:var(--bluebg)">{{ atualizarLabel }}</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px">
+          <sc-for list="{{ ticketEntries }}" as="t" hint-placeholder-count="6">
+            <div style="{{ t.cardStyle }}">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+                <div style="{{ t.titleStyle }}">{{ t.status }}</div>
+                <div title="Filtro combinado" style="font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px">{{ t.combined }}</div>
+              </div>
+              <div style="{{ t.valueStyle }}">{{ t.primary }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- FILTERS -->
+      <section id="sec-activities" style="display:grid;grid-template-columns:1.5fr 1fr;gap:12px;margin-top:26px">
+        <label style="font-size:11px;color:var(--muted);display:grid;gap:6px">Filtrar Atividades
+          <input type="search" value="{{ search }}" onChange="{{ onSearch }}" placeholder="Buscar por título, atividade, chamado ou pontos a destacar">
+        </label>
+        <label style="font-size:11px;color:var(--muted);display:grid;gap:6px">Filtrar Seção
+          <select value="{{ sectionFilter }}" onChange="{{ onSectionFilter }}">
+            <option value="all">Todas as seções</option>
+            <sc-for list="{{ sectionOptions }}" as="opt" hint-placeholder-count="4"><option value="{{ opt }}">{{ opt }}</option></sc-for>
+          </select>
+        </label>
+      </section>
+
+      <!-- SECTIONS GRID -->
+      <section style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+        <sc-for list="{{ viewSections }}" as="sec" hint-placeholder-count="4">
+          <section style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column">
+            <header style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <div style="display:flex;align-items:baseline;gap:10px">
+                <h2 style="font-family:'Playfair Display',serif;font-size:17px;font-weight:600;color:var(--ink);margin:0">{{ sec.name }}</h2>
+                <span style="font-size:11px;color:var(--dim)">{{ sec.countLabel }}</span>
+              </div>
+              <button type="button" onClick="{{ sec.openComposer }}" aria-label="Adicionar atividade" style="width:28px;height:28px;border-radius:8px;border:1px solid var(--goldln);background:transparent;color:var(--goldL);font-size:16px;line-height:1" style-hover="background:var(--goldbg)">+</button>
+            </header>
+            <sc-if value="{{ sec.hasVisible }}" hint-placeholder-val="{{ true }}">
+              <ul style="list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px">
+                <sc-for list="{{ sec.activities }}" as="item" hint-placeholder-count="2">
+                  <li style="{{ item.cardStyle }}">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                      <h3 style="font-size:13.5px;font-weight:600;color:var(--ink);margin:0">{{ item.title }}</h3>
+                      <div style="display:flex;gap:4px;align-items:center;position:relative;flex:none">
+                        <button type="button" onClick="{{ item.moveLeft }}" disabled="{{ item.isFirst }}" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:11px" style-hover="color:var(--ink)">←</button>
+                        <button type="button" onClick="{{ item.moveRight }}" disabled="{{ item.isLast }}" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:11px" style-hover="color:var(--ink)">→</button>
+                        <button type="button" onClick="{{ item.toggleMenu }}" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:13px" style-hover="color:var(--goldL)">⁝</button>
+                        <sc-if value="{{ item.menuOpen }}" hint-placeholder-val="{{ false }}">
+                          <div style="position:fixed;inset:0;z-index:30" onClick="{{ closeMenus }}"></div>
+                          <div style="position:absolute;right:0;top:26px;min-width:150px;display:grid;gap:2px;background:var(--panel);border:1px solid var(--goldln);border-radius:10px;box-shadow:var(--shadow);padding:6px;z-index:31">
+                            <button type="button" onClick="{{ item.edit }}" style="text-align:left;padding:8px 10px;border:none;border-radius:6px;background:transparent;color:var(--body-c);font-size:12px" style-hover="background:var(--bluebg)">Editar</button>
+                            <button type="button" onClick="{{ item.duplicate }}" style="text-align:left;padding:8px 10px;border:none;border-radius:6px;background:transparent;color:var(--body-c);font-size:12px" style-hover="background:var(--bluebg)">Duplicar</button>
+                            <button type="button" onClick="{{ item.askDelete }}" style="text-align:left;padding:8px 10px;border:none;border-radius:6px;background:transparent;color:#ff6b78;font-size:12px" style-hover="background:rgba(255,107,120,.08)">Apagar</button>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </div>
+                    <sc-if value="{{ item.roadmapMeta }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+                        <span style="{{ item.diffStyle }}">{{ item.diffLabel }}</span>
+                        <sc-if value="{{ item.category }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--blueln);color:var(--blueL);background:var(--bluebg)">{{ item.category }}</span></sc-if>
+                        <sc-if value="{{ item.cycleImplantation }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)">Ciclo: {{ item.cycleImplantation }}</span></sc-if>
+                      </div>
+                      <sc-if value="{{ item.subtitle }}" hint-placeholder-val="{{ false }}"><p style="font-size:12px;color:var(--muted);margin:8px 0 0;font-style:italic">{{ item.subtitle }}</p></sc-if>
+                      <sc-if value="{{ item.impact }}" hint-placeholder-val="{{ false }}"><p style="font-size:12px;color:var(--body-c);margin:6px 0 0"><span style="color:var(--gold);font-weight:600">Impacto:</span> {{ item.impact }}</p></sc-if>
+                    </sc-if>
+                    <sc-if value="{{ item.activity }}" hint-placeholder-val="{{ true }}">
+                      <p style="font-size:12.5px;color:var(--muted);margin:6px 0 0;line-height:1.5">{{ item.activity }}</p>
+                    </sc-if>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+                      <sc-if value="{{ item.called }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--blueln);color:var(--blueL)">Chamado {{ item.called }}</span></sc-if>
+                      <sc-if value="{{ item.cycleTime }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)">Cycle Time: {{ item.cycleTime }}</span></sc-if>
+                      <sc-if value="{{ item.team }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)">Equipe: {{ item.team }}</span></sc-if>
+                    </div>
+                    <sc-if value="{{ item.highlight }}" hint-placeholder-val="{{ false }}">
+                      <p style="font-size:11.5px;color:var(--goldL);margin:8px 0 0;line-height:1.5;white-space:pre-line">★ {{ item.highlight }}</p>
+                    </sc-if>
+                  </li>
+                </sc-for>
+              </ul>
+            </sc-if>
+            <sc-if value="{{ sec.emptyLabel }}" hint-placeholder-val="{{ false }}">
+              <p style="font-size:12px;color:var(--dim);margin:14px 0 4px;font-style:italic">{{ sec.emptyLabel }}</p>
+            </sc-if>
+          </section>
+        </sc-for>
+      </section>
+
+      <!-- ROADMAP -->
+      <sc-if value="{{ roadmap }}" hint-placeholder-val="{{ false }}">
+        <div id="sec-roadmap" style="display:flex;align-items:center;gap:14px;margin:30px 0 12px">
+          <h2 style="font-family:'Playfair Display',serif;font-size:21px;font-weight:600;color:var(--ink);margin:0">{{ roadmap.name }}</h2>
+          <div style="flex:1;height:1px;background:linear-gradient(90deg,var(--goldln),transparent)"></div>
+        </div>
+        <section style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px;margin-bottom:12px">
+          <label style="font-size:11px;color:var(--muted);display:grid;gap:6px">Filtrar Roadmap
+            <input type="search" value="{{ roadSearch }}" onChange="{{ onRoadSearch }}" placeholder="Buscar por título, subtítulo, impacto ou categoria">
+          </label>
+          <label style="font-size:11px;color:var(--muted);display:grid;gap:6px">Categoria
+            <select value="{{ roadCat }}" onChange="{{ onRoadCat }}"><option value="all">Todas</option><option value="Infraestrutura">Infraestrutura</option><option value="Dados">Dados</option><option value="Processos">Processos</option></select>
+          </label>
+          <label style="font-size:11px;color:var(--muted);display:grid;gap:6px">Dificuldade
+            <select value="{{ roadDiff }}" onChange="{{ onRoadDiff }}"><option value="all">Todas</option><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option></select>
+          </label>
+        </section>
+        <section style="display:grid;grid-template-columns:1fr;gap:12px">
+          <sc-for list="{{ roadmapList }}" as="sec" hint-placeholder-count="1">
+            <section style="background:var(--panel);border:1px solid var(--goldln);border-radius:14px;padding:16px 18px">
+              <header style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                <span style="font-size:11px;color:var(--dim)">{{ sec.countLabel }}</span>
+                <button type="button" onClick="{{ sec.openComposer }}" aria-label="Adicionar item ao roadmap" style="width:28px;height:28px;border-radius:8px;border:1px solid var(--goldln);background:transparent;color:var(--goldL);font-size:16px;line-height:1" style-hover="background:var(--goldbg)">+</button>
+              </header>
+              <sc-if value="{{ sec.hasVisible }}" hint-placeholder-val="{{ true }}">
+                <ul style="list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                  <sc-for list="{{ sec.activities }}" as="item" hint-placeholder-count="2">
+                    <li style="{{ item.cardStyle }}">
+                      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                        <h3 style="font-size:13.5px;font-weight:600;color:var(--ink);margin:0">{{ item.title }}</h3>
+                        <div style="display:flex;gap:4px;align-items:center;position:relative;flex:none">
+                          <button type="button" onClick="{{ item.moveLeft }}" disabled="{{ item.isFirst }}" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:11px" style-hover="color:var(--ink)">←</button>
+                          <button type="button" onClick="{{ item.moveRight }}" disabled="{{ item.isLast }}" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:11px" style-hover="color:var(--ink)">→</button>
+                          <button type="button" onClick="{{ item.toggleMenu }}" style="width:22px;height:22px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:13px" style-hover="color:var(--goldL)">⁝</button>
+                          <sc-if value="{{ item.menuOpen }}" hint-placeholder-val="{{ false }}">
+                            <div style="position:fixed;inset:0;z-index:30" onClick="{{ closeMenus }}"></div>
+                            <div style="position:absolute;right:0;top:26px;min-width:150px;display:grid;gap:2px;background:var(--panel);border:1px solid var(--goldln);border-radius:10px;box-shadow:var(--shadow);padding:6px;z-index:31">
+                              <button type="button" onClick="{{ item.edit }}" style="text-align:left;padding:8px 10px;border:none;border-radius:6px;background:transparent;color:var(--body-c);font-size:12px" style-hover="background:var(--bluebg)">Editar</button>
+                              <button type="button" onClick="{{ item.duplicate }}" style="text-align:left;padding:8px 10px;border:none;border-radius:6px;background:transparent;color:var(--body-c);font-size:12px" style-hover="background:var(--bluebg)">Duplicar</button>
+                              <button type="button" onClick="{{ item.askDelete }}" style="text-align:left;padding:8px 10px;border:none;border-radius:6px;background:transparent;color:#ff6b78;font-size:12px" style-hover="background:rgba(255,107,120,.08)">Apagar</button>
+                            </div>
+                          </sc-if>
+                        </div>
+                      </div>
+                      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+                        <span style="{{ item.diffStyle }}">{{ item.diffLabel }}</span>
+                        <sc-if value="{{ item.category }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--blueln);color:var(--blueL);background:var(--bluebg)">{{ item.category }}</span></sc-if>
+                        <sc-if value="{{ item.cycleImplantation }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)">Ciclo: {{ item.cycleImplantation }}</span></sc-if>
+                      </div>
+                      <sc-if value="{{ item.subtitle }}" hint-placeholder-val="{{ false }}"><p style="font-size:12px;color:var(--muted);margin:8px 0 0;font-style:italic">{{ item.subtitle }}</p></sc-if>
+                      <sc-if value="{{ item.impact }}" hint-placeholder-val="{{ false }}"><p style="font-size:12px;color:var(--body-c);margin:6px 0 0"><span style="color:var(--gold);font-weight:600">Impacto:</span> {{ item.impact }}</p></sc-if>
+                      <sc-if value="{{ item.team }}" hint-placeholder-val="{{ false }}"><p style="font-size:11px;color:var(--muted);margin:8px 0 0">Equipe: {{ item.team }}</p></sc-if>
+                    </li>
+                  </sc-for>
+                </ul>
+              </sc-if>
+              <sc-if value="{{ sec.emptyLabel }}" hint-placeholder-val="{{ false }}">
+                <p style="font-size:12px;color:var(--dim);margin:14px 0 4px;font-style:italic">{{ sec.emptyLabel }}</p>
+              </sc-if>
+            </section>
+          </sc-for>
+        </section>
+      </sc-if>
+
+      <!-- FOOTER -->
+      <sc-if value="{{ showFooter }}" hint-placeholder-val="{{ true }}">
+        <footer style="margin-top:40px;border-top:1px solid var(--goldln);padding-top:24px;display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap">
+          <div>
+            <div style="font-family:'Playfair Display',serif;font-size:16px;color:var(--ink)">&lt;/&gt; ChristianW$</div>
+            <p style="font-size:12px;color:var(--dim);margin:6px 0 0;font-weight:300">Conectando código, café e criatividade.</p>
+          </div>
+          <div style="display:flex;gap:48px">
+            <div>
+              <div style="font-size:10px;letter-spacing:.24em;color:var(--gold);font-weight:600;margin-bottom:10px">RECURSOS</div>
+              <div style="display:grid;gap:6px;font-size:12px"><a href="https://github.com/Wyterlin/my-website?tab=readme-ov-file#my-website" target="_blank" rel="noreferrer">Documentação</a><a href="https://github.com/Wyterlin?tab=repositories" target="_blank" rel="noreferrer">Repositórios</a><a href="https://dev.to/silveira" target="_blank" rel="noreferrer">Blog Dev</a></div>
+            </div>
+            <div>
+              <div style="font-size:10px;letter-spacing:.24em;color:var(--gold);font-weight:600;margin-bottom:10px">CONTATO</div>
+              <div style="display:grid;gap:6px;font-size:12px"><a href="https://www.linkedin.com/in/christian-wyterlin-silveira" target="_blank" rel="noreferrer">Linkedin</a><a href="https://github.com/Wyterlin" target="_blank" rel="noreferrer">GitHub</a></div>
+            </div>
+          </div>
+          <p style="width:100%;font-size:11px;color:var(--dim);margin:16px 0 0">ChristianW$ · Todos os direitos reservados.</p>
+        </footer>
+      </sc-if>
+    </div>
+  </main>
+
+  <!-- COMPOSER MODAL -->
+  <sc-if value="{{ composerOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:var(--modalbg);backdrop-filter:blur(4px);display:grid;place-items:center;z-index:50;animation:fadeIn .18s ease" onClick="{{ cancelComposer }}">
+      <div style="width:min(560px,92vw);max-height:86vh;overflow-y:auto;background:var(--panel);border:1px solid var(--goldln);border-radius:16px;box-shadow:var(--shadow);padding:24px" onClick="{{ stopClick }}">
+        <h3 style="font-family:'Playfair Display',serif;font-size:19px;font-weight:600;color:var(--ink);margin:0">{{ composerTitle }}</h3>
+        <p style="font-size:10.5px;color:var(--dim);margin:6px 0 16px">Ctrl+Enter salvar · Esc cancelar</p>
+        <div style="display:grid;gap:12px">
+          <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Título
+            <input data-field="title" value="{{ draft.title }}" onChange="{{ onDraftInput }}" placeholder="Ex.: Correção de erro">
+          </label>
+          <sc-if value="{{ composerIsRoadmap }}" hint-placeholder-val="{{ false }}">
+            <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Subtítulo
+              <input data-field="subtitle" value="{{ draft.subtitle }}" onChange="{{ onDraftInput }}" placeholder="Ex.: Otimização do fluxo de atendimento">
+            </label>
+            <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Impacto
+              <textarea data-field="impact" rows="3" value="{{ draft.impact }}" onChange="{{ onDraftInput }}" placeholder="Ex.: Redução de 20% no tempo de processamento"></textarea>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+              <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Ciclo de Implantação
+                <input data-field="cycleImplantation" value="{{ draft.cycleImplantation }}" onChange="{{ onDraftInput }}" placeholder="Ex.: 45 dias">
+              </label>
+              <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Categoria
+                <select data-field="category" value="{{ draft.category }}" onChange="{{ onDraftInput }}"><option value="Infraestrutura">Infraestrutura</option><option value="Dados">Dados</option><option value="Processos">Processos</option></select>
+              </label>
+              <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Dificuldade
+                <select data-field="difficulty" value="{{ draft.difficulty }}" onChange="{{ onDraftInput }}"><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option></select>
+              </label>
+            </div>
+          </sc-if>
+          <sc-if value="{{ composerIsNormal }}" hint-placeholder-val="{{ true }}">
+            <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Chamado (opcional, apenas números)
+              <input data-field="called" inputMode="numeric" value="{{ draft.called }}" onChange="{{ onDraftInput }}" placeholder="Ex.: 123456">
+              <sc-if value="{{ calledError }}" hint-placeholder-val="{{ false }}"><small style="color:#ff6b78">{{ calledError }}</small></sc-if>
+            </label>
+            <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Atividade
+              <textarea data-field="activity" rows="3" value="{{ draft.activity }}" onChange="{{ onDraftInput }}" placeholder="Descreva o que foi feito"></textarea>
+            </label>
+          </sc-if>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Tempo de Ciclo (Cycle Time)
+              <input data-field="cycleTime" value="{{ draft.cycleTime }}" onChange="{{ onDraftInput }}" placeholder="Ex.: 3h 20m">
+            </label>
+            <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Prioridade
+              <input data-field="position" type="number" min="1" value="{{ draft.position }}" onChange="{{ onDraftInput }}">
+            </label>
+          </div>
+          <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Equipe do Projeto
+            <input data-field="projectTeamInput" value="{{ draft.projectTeamInput }}" onChange="{{ onDraftInput }}" placeholder="Ex.: Ana Souza, Bruno Lima">
+          </label>
+          <sc-if value="{{ composerIsNormal }}" hint-placeholder-val="{{ true }}">
+            <label style="font-size:11px;color:var(--muted);display:grid;gap:5px">Pontos a Destacar (opcional)
+              <textarea data-field="highlight" rows="2" value="{{ draft.highlight }}" onChange="{{ onDraftInput }}" placeholder="Somente se houver"></textarea>
+            </label>
+          </sc-if>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+          <button type="button" onClick="{{ cancelComposer }}" style="padding:10px 18px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12.5px">Cancelar</button>
+          <button type="button" onClick="{{ saveComposer }}" style="padding:10px 22px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--blue),#1c34a0);color:#fff;font-size:12.5px;font-weight:600">Salvar</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- DELETE CONFIRM -->
+  <sc-if value="{{ deleteOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:var(--modalbg);backdrop-filter:blur(4px);display:grid;place-items:center;z-index:52;animation:fadeIn .18s ease" onClick="{{ cancelDelete }}">
+      <div style="width:min(420px,92vw);background:var(--panel);border:1px solid rgba(255,107,120,.4);border-radius:16px;box-shadow:var(--shadow);padding:24px" onClick="{{ stopClick }}">
+        <h3 style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;color:var(--ink);margin:0">Confirmar exclusão</h3>
+        <p style="font-size:13px;color:var(--muted);margin:12px 0 0;line-height:1.5">{{ deleteWarning }}</p>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+          <button type="button" onClick="{{ cancelDelete }}" style="padding:10px 18px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12.5px">Cancelar</button>
+          <button type="button" onClick="{{ confirmDelete }}" style="padding:10px 22px;border-radius:8px;border:none;background:#c23440;color:#fff;font-size:12.5px;font-weight:600">Apagar</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- MANAGE SECTIONS -->
+  <sc-if value="{{ manageOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:var(--modalbg);backdrop-filter:blur(4px);display:grid;place-items:center;z-index:50;animation:fadeIn .18s ease" onClick="{{ closeManage }}">
+      <div style="width:min(540px,92vw);max-height:84vh;overflow-y:auto;background:var(--panel);border:1px solid var(--goldln);border-radius:16px;box-shadow:var(--shadow);padding:24px" onClick="{{ stopClick }}">
+        <h3 style="font-family:'Playfair Display',serif;font-size:19px;font-weight:600;color:var(--ink);margin:0">Gerenciar Seções</h3>
+        <p style="font-size:12px;color:var(--dim);margin:6px 0 16px">Adicione, renomeie, reordene ou remova os temas principais do dashboard.</p>
+        <div style="display:grid;gap:8px">
+          <sc-for list="{{ manageRows }}" as="row" hint-placeholder-count="6">
+            <div style="display:flex;gap:6px;align-items:center;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:8px 10px">
+              <input data-index="{{ row.index }}" value="{{ row.name }}" onChange="{{ onRenameSection }}" style="flex:1">
+              <span style="font-size:10px;color:var(--dim);flex:none">{{ row.count }} itens</span>
+              <button type="button" onClick="{{ row.moveUp }}" disabled="{{ row.isFirst }}" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted)">↑</button>
+              <button type="button" onClick="{{ row.moveDown }}" disabled="{{ row.isLast }}" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted)">↓</button>
+              <button type="button" onClick="{{ row.remove }}" style="width:26px;height:26px;border-radius:6px;border:1px solid rgba(255,107,120,.35);background:transparent;color:#ff6b78">✕</button>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <input value="{{ newSectionName }}" onChange="{{ onNewSectionName }}" placeholder="Nome da nova seção (ex.: Infraestrutura Cloud)" style="flex:1">
+          <button type="button" onClick="{{ addSection }}" style="padding:10px 18px;border-radius:8px;border:1px solid var(--goldln);background:var(--goldbg);color:var(--goldL);font-size:12.5px;font-weight:600;flex:none">+ Adicionar</button>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:20px">
+          <button type="button" onClick="{{ closeManage }}" style="padding:10px 22px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--blue),#1c34a0);color:#fff;font-size:12.5px;font-weight:600">Concluído</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- HISTORY -->
+  <sc-if value="{{ historyOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:var(--modalbg);backdrop-filter:blur(4px);display:grid;place-items:center;z-index:50;animation:fadeIn .18s ease" onClick="{{ closeHistory }}">
+      <div style="width:min(520px,92vw);max-height:80vh;overflow-y:auto;background:var(--panel);border:1px solid var(--goldln);border-radius:16px;box-shadow:var(--shadow);padding:24px" onClick="{{ stopClick }}">
+        <h3 style="font-family:'Playfair Display',serif;font-size:19px;font-weight:600;color:var(--ink);margin:0 0 14px">Histórico Recente de Atividades</h3>
+        <sc-if value="{{ hasHistory }}" hint-placeholder-val="{{ false }}">
+          <ul style="list-style:none;margin:0;padding:0;display:grid;gap:8px">
+            <sc-for list="{{ historyEntries }}" as="h" hint-placeholder-count="3">
+              <li style="border-left:2px solid var(--gold);padding:8px 12px;background:var(--panel2);border-radius:0 8px 8px 0">
+                <div style="font-size:12px;font-weight:600;color:var(--ink)">{{ h.section }}</div>
+                <div style="font-size:11.5px;color:var(--muted);margin-top:2px">{{ h.line }}</div>
+              </li>
+            </sc-for>
+          </ul>
+        </sc-if>
+        <sc-if value="{{ noHistory }}" hint-placeholder-val="{{ true }}">
+          <p style="font-size:12.5px;color:var(--dim);font-style:italic;margin:0">Ainda não há movimentações registradas.</p>
+        </sc-if>
+        <div style="display:flex;justify-content:flex-end;margin-top:18px">
+          <button type="button" onClick="{{ closeHistory }}" style="padding:10px 18px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12.5px">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- TOAST -->
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--goldln);border-radius:999px;padding:10px 22px;font-size:12.5px;color:var(--goldL);box-shadow:var(--shadow);z-index:60;animation:fadeIn .2s ease">{{ toast }}</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;temaInicial&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Aparência&quot;},&quot;mostrarRodape&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Aparência&quot;}}">
+const LS_KEY = "pdx-luxury-v1";
+const EMPTY_DRAFT = { title: "", subtitle: "", impact: "", difficulty: "medium", category: "Processos", cycleImplantation: "", called: "", activity: "", cycleTime: "", projectTeamInput: "", highlight: "", position: 1 };
+const SEED_SECTIONS = [
+  { name: "SAP Business One", activities: [
+    { id: "a1", title: "Cálculo de Comissão", activity: "Correção do cálculo de comissão na coluna de Comissão nos Documentos de Marketing.", highlight: "", called: "", position: 1 },
+    { id: "a2", title: "Cálculo de Margem", activity: "Manutenção nos cálculos e campos de Margem.", highlight: "Modificação da visualização do valor real no BD.", called: "", position: 2 }
+  ]},
+  { name: "Shop Control 9", activities: [] },
+  { name: "Queries (Consultas)", activities: [
+    { id: "a3", title: "Consulta do ICMS para Entrega", activity: "Criação de consulta da tela de Entrega para emissão de nota fiscal pelo portal.", highlight: "Consulta solicitada por Marcelo Lopes", called: "", position: 1 }
+  ]},
+  { name: "Banco de Dados (BD)", activities: [
+    { id: "a4", title: "UPDATES", activity: "Inativação de alguns UPDATES e reutilizados em Consulta de Tela nos documentos de Marketing no SAP.", highlight: "Nem todos os UPDATES foram inativados.", called: "", position: 1 },
+    { id: "a5", title: "Otimização da TransactionNotification", activity: "Aperfeiçoamento da escrita das consultas, condições, descrição dos bloqueios e comentários.", highlight: "Tempo atual: 1s50ms para bloquear · 1s60ms para alterar a Transaction\nTempo anterior: 3s70ms para bloquear · 50s para alterar a Transaction", called: "", position: 2 }
+  ]},
+  { name: "Manutenção de Máquinas", activities: [] },
+  { name: "Treinamentos", activities: [] },
+  { name: "Roadmap de Ações e Melhoria Contínua", activities: [
+    { id: "r1", title: "Migração de ambiente HANA", subtitle: "Consolidação da base analítica", impact: "Redução de 40% no tempo das consultas críticas e maior previsibilidade.", difficulty: "high", category: "Infraestrutura", cycleImplantation: "60 dias", activity: "", position: 1 }
+  ]}
+];
+const TICKETS = [
+  { status: "Novo Chamado", primary: 14, combined: 16 },
+  { status: "Em Andamento", primary: 23, combined: 25 },
+  { status: "Concluído", primary: 38, combined: 41 },
+  { status: "Resolvido", primary: 11, combined: 12 },
+  { status: "Aguardando Solicitante", primary: 6, combined: 7 },
+  { status: "Aguardando Responsável", primary: 4, combined: 5 }
+];
+const DIFF_LABEL = { low: "Baixa", medium: "Média", high: "Alta" };
+
+class Component extends DCLogic {
+  state = {
+    theme: this.props.temaInicial || "dark",
+    sections: SEED_SECTIONS,
+    startDate: "2026-03-23", endDate: "2026-03-27",
+    search: "", sectionFilter: "all",
+    roadSearch: "", roadCat: "all", roadDiff: "all",
+    composer: null, deleting: null, deletingSection: null,
+    manageOpen: false, historyOpen: false, exportOpen: false,
+    newSectionName: "", history: [], autosave: "idle", savedAt: null,
+    loading: false, activeMenuId: null, toast: "", activeNav: "sec-overview"
+  };
+  mainRef = React.createRef();
+
+  componentDidMount() {
+    try {
+      const raw = window.localStorage.getItem(LS_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        this.setState({
+          sections: Array.isArray(saved.sections) ? saved.sections : SEED_SECTIONS,
+          theme: saved.theme === "light" ? "light" : "dark",
+          history: Array.isArray(saved.history) ? saved.history : []
+        }, () => this.applyTheme());
+        return;
+      }
+    } catch {}
+    this.applyTheme();
+  }
+  applyTheme() { document.body.dataset.theme = this.state.theme; }
+  persist() {
+    this.setState({ autosave: "saving" });
+    try {
+      window.localStorage.setItem(LS_KEY, JSON.stringify({ sections: this.state.sections, theme: this.state.theme, history: this.state.history.slice(0, 40) }));
+    } catch {}
+    clearTimeout(this._saveT);
+    this._saveT = setTimeout(() => this.setState({ autosave: "saved", savedAt: new Date() }), 450);
+  }
+  log(section, type, title) {
+    const entry = { id: String(Date.now()) + Math.random().toString(36).slice(2, 6), section, type, title, timestamp: Date.now() };
+    this.setState((s) => ({ history: [entry, ...s.history].slice(0, 40) }), () => this.persist());
+  }
+  showToast(msg) {
+    this.setState({ toast: msg });
+    clearTimeout(this._toastT);
+    this._toastT = setTimeout(() => this.setState({ toast: "" }), 2600);
+  }
+  norm(v) { return String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
+  isRoadmapName(name) { return this.norm(name).includes("roadmap"); }
+
+  renderVals() {
+    const s = this.state;
+    const sections = s.sections;
+    const set = (patch) => this.setState(patch);
+
+    const navDefs = [
+      { id: "sec-overview", icon: "◈", label: "Visão Geral" },
+      { id: "sec-tickets", icon: "▤", label: "Chamados SULTS" },
+      { id: "sec-activities", icon: "▦", label: "Seções de Atividades" },
+      { id: "sec-roadmap", icon: "◇", label: "Roadmap" },
+      { id: "manage", icon: "⚙", label: "Gerenciar Seções" }
+    ];
+    const navItems = navDefs.map((n) => ({
+      icon: n.icon, label: n.label,
+      style: "display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;font-size:13px;text-align:left;width:100%;box-sizing:border-box;" +
+        (s.activeNav === n.id && n.id !== "manage"
+          ? "background:linear-gradient(90deg,rgba(43,79,216,.28),rgba(43,79,216,.05));border-left:2px solid var(--gold);color:var(--ink);font-weight:600"
+          : "background:transparent;color:var(--muted)"),
+      go: () => {
+        if (n.id === "manage") { set({ manageOpen: true }); return; }
+        set({ activeNav: n.id });
+        const el = document.getElementById(n.id);
+        const main = this.mainRef.current;
+        if (el && main) main.scrollTo({ top: el.offsetTop - 16, behavior: "smooth" });
+      }
+    }));
+
+    // KPIs
+    const opTotal = TICKETS.reduce((a, t) => a + t.primary, 0);
+    const combTotal = TICKETS.reduce((a, t) => a + t.combined, 0);
+    const nonRoad = sections.filter((sec) => !this.isRoadmapName(sec.name));
+    const manualTotal = nonRoad.reduce((a, sec) => a + sec.activities.length, 0);
+    const semChamado = nonRoad.reduce((a, sec) => a + sec.activities.filter((it) => !String(it.called || "").trim()).length, 0);
+    const sectionKpis = sections.filter((sec) => sec.activities.length > 0).map((sec) => ({ name: sec.name, total: sec.activities.length }));
+
+    // Tickets
+    const goldStatuses = ["concluido"];
+    const ticketEntries = TICKETS.map((t) => {
+      const isGold = goldStatuses.some((g) => this.norm(t.status).includes(g));
+      return {
+        status: t.status, primary: t.primary, combined: t.combined,
+        cardStyle: "border-radius:12px;padding:14px;border:1px solid " + (isGold ? "var(--goldln);background:linear-gradient(160deg,var(--goldbg),transparent)" : "var(--blueln);background:linear-gradient(160deg,var(--bluebg),transparent)"),
+        titleStyle: "font-size:11px;line-height:1.3;" + (isGold ? "color:var(--goldL)" : "color:var(--muted)"),
+        valueStyle: "font-size:26px;font-weight:700;margin-top:8px;" + (isGold ? "color:var(--goldL)" : "color:var(--ink)")
+      };
+    });
+
+    // Section/activity view builder
+    const search = this.norm(s.search);
+    const buildItems = (sec, secIndex, isRoadmap, filterFn) => {
+      const ordered = [...(sec.activities || [])].sort((a, b) => (a.position || 0) - (b.position || 0));
+      const visible = ordered.filter(filterFn);
+      return visible.map((item) => {
+        const oi = ordered.findIndex((a) => a.id === item.id);
+        const accent = item.highlight || (isRoadmap && item.difficulty === "high") ? "var(--gold)" : "var(--blue)";
+        const bg = accent === "var(--gold)" ? "var(--goldbg)" : "var(--bluebg)";
+        return {
+          title: item.title, activity: isRoadmap ? "" : (item.activity || ""),
+          called: String(item.called || ""), cycleTime: item.cycleTime || "",
+          team: Array.isArray(item.projectTeam) && item.projectTeam.length ? item.projectTeam.join(", ") : "",
+          highlight: item.highlight || "",
+          roadmapMeta: isRoadmap, subtitle: item.subtitle || "", impact: item.impact || item.benefit || "",
+          category: isRoadmap ? (item.category || "") : "", cycleImplantation: item.cycleImplantation || "",
+          diffLabel: "Dificuldade: " + (DIFF_LABEL[item.difficulty] || "Média"),
+          diffStyle: "font-size:10.5px;padding:3px 9px;border-radius:999px;border:1px solid " +
+            (item.difficulty === "high" ? "rgba(255,107,120,.45);color:#ff8d97" : item.difficulty === "low" ? "rgba(78,201,123,.45);color:#6fd898" : "var(--goldln);color:var(--goldL)"),
+          cardStyle: "border-left:2px solid " + accent + ";padding:12px 14px;background:" + bg + ";border-radius:0 10px 10px 0",
+          isFirst: oi === 0, isLast: oi === ordered.length - 1,
+          menuOpen: s.activeMenuId === item.id,
+          toggleMenu: () => set({ activeMenuId: s.activeMenuId === item.id ? null : item.id }),
+          moveLeft: () => this.moveActivity(secIndex, item.id, -1),
+          moveRight: () => this.moveActivity(secIndex, item.id, 1),
+          edit: () => this.openEdit(secIndex, item),
+          duplicate: () => this.duplicateActivity(secIndex, item.id),
+          askDelete: () => set({ activeMenuId: null, deleting: { secIndex, id: item.id, title: item.title } })
+        };
+      });
+    };
+
+    const nonRoadEntries = sections.map((sec, index) => ({ sec, index })).filter(({ sec }) => !this.isRoadmapName(sec.name));
+    const filteredEntries = nonRoadEntries.filter(({ sec }) => s.sectionFilter === "all" || sec.name === s.sectionFilter);
+    const viewSections = filteredEntries.map(({ sec, index }) => {
+      const filterFn = (item) => {
+        if (!search) return true;
+        const hay = this.norm([item.title, item.activity, item.highlight, item.called, (item.projectTeam || []).join(" ")].join(" "));
+        return hay.includes(search);
+      };
+      const items = buildItems(sec, index, false, filterFn);
+      return {
+        name: sec.name, countLabel: sec.activities.length + " item(ns)",
+        activities: items, hasVisible: items.length > 0,
+        emptyLabel: !sec.activities.length ? "Nenhuma atividade registrada para esta seção."
+          : !items.length ? "Nenhuma atividade desta seção corresponde ao filtro atual." : "",
+        openComposer: () => this.openComposer(index)
+      };
+    });
+
+    const roadEntry = sections.map((sec, index) => ({ sec, index })).find(({ sec }) => this.isRoadmapName(sec.name));
+    const roadSearch = this.norm(s.roadSearch);
+    const roadmapList = roadEntry ? [(() => {
+      const filterFn = (item) => {
+        const hay = this.norm([item.title, item.subtitle, item.impact, item.benefit, item.category].join(" "));
+        const okText = !roadSearch || hay.includes(roadSearch);
+        const okCat = s.roadCat === "all" || String(item.category || "") === s.roadCat;
+        const okDiff = s.roadDiff === "all" || String(item.difficulty || "") === s.roadDiff;
+        return okText && okCat && okDiff;
+      };
+      const items = buildItems(roadEntry.sec, roadEntry.index, true, filterFn);
+      return {
+        countLabel: roadEntry.sec.activities.length + " item(ns) no roadmap",
+        activities: items, hasVisible: items.length > 0,
+        emptyLabel: !roadEntry.sec.activities.length ? "Nenhum item no roadmap ainda."
+          : !items.length ? "Nenhum item corresponde ao filtro atual." : "",
+        openComposer: () => this.openComposer(roadEntry.index)
+      };
+    })()] : [];
+
+    // Composer
+    const c = s.composer;
+    const draft = c ? c.draft : EMPTY_DRAFT;
+    const isRoadmapComposer = c ? this.isRoadmapName(sections[c.secIndex]?.name) : false;
+    const digits = String(draft.called || "").replace(/\D+/g, "");
+    const calledError = digits.length > 0 && (digits.length < 4 || digits.length > 20) ? "O chamado deve ter entre 4 e 20 dígitos." : "";
+
+    // Manage rows
+    const manageRows = sections.map((sec, index) => ({
+      index: String(index), name: sec.name, count: sec.activities.length,
+      isFirst: index === 0, isLast: index === sections.length - 1,
+      moveUp: () => this.moveSection(index, -1),
+      moveDown: () => this.moveSection(index, 1),
+      remove: () => set({ deletingSection: { index, name: sec.name } })
+    }));
+
+    const deleting = s.deleting || s.deletingSection;
+    const deleteWarning = s.deleting
+      ? 'Esta ação removerá permanentemente a atividade "' + s.deleting.title + '".'
+      : s.deletingSection
+        ? 'Esta ação removerá a seção "' + s.deletingSection.name + '" e todas as suas atividades.'
+        : "";
+
+    const historyEntries = s.history.slice(0, 25).map((h) => ({
+      section: h.section,
+      line: h.type + " — " + h.title + " (" + new Date(h.timestamp).toLocaleString("pt-BR") + ")"
+    }));
+
+    return {
+      mainRef: this.mainRef,
+      navItems,
+      themeLabel: s.theme === "dark" ? "☀ Tema claro" : "☾ Tema escuro",
+      toggleTheme: () => this.setState({ theme: s.theme === "dark" ? "light" : "dark" }, () => { this.applyTheme(); this.persist(); }),
+      autosaveTitle: s.autosave === "saving" ? "Salvando..." : "Autosave ativo",
+      autosaveLabel: s.autosave === "saved" && s.savedAt ? "Salvo às " + new Date(s.savedAt).toLocaleTimeString("pt-BR") : s.autosave === "saving" ? "Gravando alterações" : "Aguardando alterações",
+      startDate: s.startDate, endDate: s.endDate,
+      onStartDate: (e) => set({ startDate: e.target.value }),
+      onEndDate: (e) => set({ endDate: e.target.value }),
+      rangeInvalid: !!(s.startDate && s.endDate && s.startDate > s.endDate),
+      buscarLabel: s.loading ? "Buscando..." : "Buscar Período",
+      atualizarLabel: s.loading ? "Atualizando..." : "Atualizar",
+      buscarPeriodo: () => {
+        if (s.loading) return;
+        set({ loading: true });
+        setTimeout(() => { this.setState({ loading: false }); this.showToast("Dados do período sincronizados com o SULTS."); }, 900);
+      },
+      exportOpen: s.exportOpen,
+      toggleExport: () => set({ exportOpen: !s.exportOpen }),
+      closeExport: () => set({ exportOpen: false }),
+      exportPdf: () => { set({ exportOpen: false }); this.showToast("Exportação em PDF seguirá o novo layout (próxima etapa)."); },
+      exportPptx: () => { set({ exportOpen: false }); this.showToast("O novo deck PowerPoint está em construção nesta direção visual."); },
+      kpiConsolidado: opTotal + manualTotal,
+      kpiOperacional: opTotal,
+      kpiRepact: Math.max(combTotal - opTotal, 0),
+      kpiSemChamado: semChamado,
+      sectionKpis, ticketEntries,
+      search: s.search, onSearch: (e) => set({ search: e.target.value }),
+      sectionFilter: s.sectionFilter, onSectionFilter: (e) => set({ sectionFilter: e.target.value }),
+      sectionOptions: nonRoadEntries.map(({ sec }) => sec.name),
+      viewSections,
+      roadmap: roadEntry ? { name: roadEntry.sec.name } : null,
+      roadmapList,
+      roadSearch: s.roadSearch, onRoadSearch: (e) => set({ roadSearch: e.target.value }),
+      roadCat: s.roadCat, onRoadCat: (e) => set({ roadCat: e.target.value }),
+      roadDiff: s.roadDiff, onRoadDiff: (e) => set({ roadDiff: e.target.value }),
+      closeMenus: () => set({ activeMenuId: null }),
+      // composer
+      composerOpen: !!c,
+      composerTitle: c ? ((c.editingId ? "Editar atividade em " : "Adicionar atividade em ") + (sections[c.secIndex]?.name || "")) : "",
+      composerIsRoadmap: isRoadmapComposer,
+      composerIsNormal: c ? !isRoadmapComposer : false,
+      draft, calledError,
+      onDraftInput: (e) => {
+        const field = e.target.dataset.field;
+        let value = e.target.value;
+        if (field === "called") value = String(value).replace(/\D+/g, "").slice(0, 24);
+        if (field === "position") value = Number(value || 1);
+        this.setState((st) => ({ composer: { ...st.composer, draft: { ...st.composer.draft, [field]: value } } }));
+      },
+      saveComposer: () => this.saveComposer(),
+      cancelComposer: () => set({ composer: null }),
+      stopClick: (e) => e.stopPropagation(),
+      // delete
+      deleteOpen: !!deleting, deleteWarning,
+      cancelDelete: () => set({ deleting: null, deletingSection: null }),
+      confirmDelete: () => this.confirmDelete(),
+      // manage
+      manageOpen: s.manageOpen,
+      closeManage: () => set({ manageOpen: false }),
+      manageRows,
+      newSectionName: s.newSectionName,
+      onNewSectionName: (e) => set({ newSectionName: e.target.value }),
+      onRenameSection: (e) => {
+        const index = Number(e.target.dataset.index);
+        const value = e.target.value;
+        this.setState((st) => {
+          const next = st.sections.map((sec, i) => (i === index ? { ...sec, name: value } : sec));
+          return { sections: next };
+        }, () => this.persist());
+      },
+      addSection: () => this.addSection(),
+      // history
+      historyOpen: s.historyOpen,
+      openHistory: () => set({ exportOpen: false, historyOpen: true }),
+      closeHistory: () => set({ historyOpen: false }),
+      hasHistory: s.history.length > 0, noHistory: s.history.length === 0,
+      historyEntries,
+      toast: s.toast,
+      showFooter: this.props.mostrarRodape ?? true
+    };
+  }
+
+  openComposer(secIndex) {
+    const sec = this.state.sections[secIndex];
+    const nextPos = (sec.activities || []).reduce((a, it) => Math.max(a, Number(it.position || 0)), 0) + 1;
+    this.setState({ activeMenuId: null, composer: { secIndex, editingId: null, draft: { ...EMPTY_DRAFT, position: nextPos } } });
+  }
+  openEdit(secIndex, item) {
+    this.setState({
+      activeMenuId: null,
+      composer: { secIndex, editingId: item.id, draft: {
+        title: item.title || "", subtitle: item.subtitle || "", impact: item.impact || item.benefit || "",
+        difficulty: item.difficulty || "medium", category: item.category || "Processos",
+        cycleImplantation: item.cycleImplantation || "", called: String(item.called || ""),
+        activity: item.activity || "", cycleTime: item.cycleTime || "",
+        projectTeamInput: Array.isArray(item.projectTeam) ? item.projectTeam.join(", ") : "",
+        highlight: item.highlight || "", position: Number(item.position || 1)
+      }}
+    });
+  }
+  saveComposer() {
+    const c = this.state.composer;
+    if (!c) return;
+    const d = c.draft;
+    if (!String(d.title).trim()) { this.showToast("Informe um título para a atividade."); return; }
+    const digits = String(d.called || "").replace(/\D+/g, "");
+    if (digits.length > 0 && (digits.length < 4 || digits.length > 20)) return;
+    const sec = this.state.sections[c.secIndex];
+    const isRoad = this.isRoadmapName(sec.name);
+    const team = String(d.projectTeamInput || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 10);
+    const base = {
+      title: d.title.trim(), activity: isRoad ? String(d.impact || "").trim() : String(d.activity || "").trim(),
+      highlight: String(d.highlight || "").trim(), called: digits, cycleTime: String(d.cycleTime || "").trim(),
+      projectTeam: team, subtitle: String(d.subtitle || "").trim(), impact: String(d.impact || "").trim(),
+      difficulty: d.difficulty, category: d.category, cycleImplantation: String(d.cycleImplantation || "").trim(),
+      position: Number(d.position || 1)
+    };
+    this.setState((st) => {
+      const sections = st.sections.map((secx, i) => {
+        if (i !== c.secIndex) return secx;
+        const acts = c.editingId
+          ? secx.activities.map((it) => (it.id === c.editingId ? { ...it, ...base } : it))
+          : [...secx.activities, { ...base, id: "x" + Date.now().toString(36) }];
+        return { ...secx, activities: acts };
+      });
+      return { sections, composer: null };
+    }, () => this.log(sec.name, c.editingId ? "Edição" : "Criação", base.title));
+  }
+  duplicateActivity(secIndex, id) {
+    const sec = this.state.sections[secIndex];
+    const item = sec.activities.find((a) => a.id === id);
+    if (!item) return;
+    this.setState((st) => {
+      const sections = st.sections.map((secx, i) => {
+        if (i !== secIndex) return secx;
+        const maxPos = secx.activities.reduce((a, it) => Math.max(a, Number(it.position || 0)), 0);
+        return { ...secx, activities: [...secx.activities, { ...item, id: "x" + Date.now().toString(36), title: item.title + " (cópia)", position: maxPos + 1 }] };
+      });
+      return { sections, activeMenuId: null };
+    }, () => this.log(sec.name, "Duplicação", item.title));
+  }
+  moveActivity(secIndex, id, dir) {
+    this.setState((st) => {
+      const sections = st.sections.map((secx, i) => {
+        if (i !== secIndex) return secx;
+        const ordered = [...secx.activities].sort((a, b) => (a.position || 0) - (b.position || 0));
+        const idx = ordered.findIndex((a) => a.id === id);
+        const swap = idx + dir;
+        if (idx < 0 || swap < 0 || swap >= ordered.length) return secx;
+        const tmp = ordered[idx].position; ordered[idx] = { ...ordered[idx], position: ordered[swap].position }; ordered[swap] = { ...ordered[swap], position: tmp };
+        return { ...secx, activities: ordered };
+      });
+      return { sections };
+    }, () => this.persist());
+  }
+  confirmDelete() {
+    const { deleting, deletingSection } = this.state;
+    if (deleting) {
+      const sec = this.state.sections[deleting.secIndex];
+      this.setState((st) => ({
+        sections: st.sections.map((secx, i) => (i === deleting.secIndex ? { ...secx, activities: secx.activities.filter((a) => a.id !== deleting.id) } : secx)),
+        deleting: null
+      }), () => this.log(sec.name, "Exclusão", deleting.title));
+      return;
+    }
+    if (deletingSection) {
+      this.setState((st) => ({
+        sections: st.sections.filter((_, i) => i !== deletingSection.index),
+        deletingSection: null
+      }), () => this.log(deletingSection.name, "Seção removida", deletingSection.name));
+    }
+  }
+  moveSection(index, dir) {
+    this.setState((st) => {
+      const next = [...st.sections];
+      const swap = index + dir;
+      if (swap < 0 || swap >= next.length) return null;
+      [next[index], next[swap]] = [next[swap], next[index]];
+      return { sections: next };
+    }, () => this.persist());
+  }
+  addSection() {
+    const name = String(this.state.newSectionName || "").trim();
+    if (!name) { this.showToast("Informe o nome da nova seção."); return; }
+    if (this.state.sections.some((s) => this.norm(s.name) === this.norm(name))) { this.showToast("Já existe uma seção com este nome."); return; }
+    this.setState((st) => ({ sections: [...st.sections, { name, activities: [] }], newSectionName: "" }),
+      () => this.log(name, "Seção criada", name));
+  }
+}
+</script>
+</body>
+</html>

@@ -65,9 +65,9 @@ function getStoredTheme() {
   try {
     const stored = String(window.localStorage.getItem(THEME_STORAGE_KEY) || "").trim();
     if ([THEME_LIGHT, THEME_DARK].includes(stored)) return stored;
-    return THEME_LIGHT;
+    return THEME_DARK;
   } catch {
-    return THEME_LIGHT;
+    return THEME_DARK;
   }
 }
 

@@ -1,12 +1,8 @@
 {
-  "name": "performance-dashboard-backend",
+  "name": "performance-dashboard",
   "version": "1.0.0",
   "private": true,
-  "type": "commonjs",
-  "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
-  },
+  "description": "Raiz do monorepo — dependências usadas pela Serverless Function do Vercel (/api).",
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "axios": "^1.8.4",

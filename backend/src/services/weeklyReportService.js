@@ -1,5 +1,22 @@
 const { randomUUID } = require("node:crypto");
-const { readStore, writeStore } = require("../utils/fileStore");
+const { getSupabase } = require("../utils/supabaseClient");
+
+const TABLE = "weekly_reports";
+
+/** Converte uma linha do Postgres para o formato usado pela API/frontend. */
+function mapRowToWeek(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    weekCode: row.week_code,
+    startDate: row.start_date || null,
+    endDate: row.end_date || null,
+    summary: row.summary || "",
+    sections: Array.isArray(row.sections) ? row.sections : [],
+    updatedAt: row.updated_at || null,
+    createdAt: row.created_at || null,
+  };
+}
 
 const DEFAULT_SECTIONS = [
   "SAP Business One",
@@ -119,14 +136,27 @@ function mapLegacyTopicsToSections(topics) {
 }
 
 async function listWeeks() {
-  const db = await readStore();
-  return db.weeks.sort((a, b) => b.weekCode.localeCompare(a.weekCode));
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select("*")
+    .order("week_code", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data || []).map(mapRowToWeek);
 }
 
 async function getWeek(weekCode) {
   const normalized = normalizeWeekCode(weekCode);
-  const db = await readStore();
-  return db.weeks.find((item) => item.weekCode === normalized) || null;
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select("*")
+    .eq("week_code", normalized)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return mapRowToWeek(data);
 }
 
 function normalizeSections(payload) {
@@ -168,32 +198,28 @@ async function upsertWeek(payload) {
     throw new Error("weekCode is required");
   }
 
-  const db = await readStore();
-  const now = new Date().toISOString();
   const sections = normalizeSections(payload);
+  const supabase = getSupabase();
 
-  const week = {
-    id: payload.id || randomUUID(),
-    weekCode,
-    startDate: payload.startDate || null,
-    endDate: payload.endDate || null,
+  // Não incluímos id/created_at no payload: em insert o Postgres gera os
+  // defaults; em conflito (update) eles são preservados. updated_at fica a
+  // cargo do trigger set_updated_at.
+  const row = {
+    week_code: weekCode,
+    start_date: payload.startDate || null,
+    end_date: payload.endDate || null,
     summary: payload.summary || "",
     sections,
-    updatedAt: now,
-    createdAt: now,
   };
 
-  const existingIndex = db.weeks.findIndex((item) => item.weekCode === weekCode);
-  if (existingIndex >= 0) {
-    week.id = db.weeks[existingIndex].id;
-    week.createdAt = db.weeks[existingIndex].createdAt;
-    db.weeks[existingIndex] = week;
-  } else {
-    db.weeks.push(week);
-  }
+  const { data, error } = await supabase
+    .from(TABLE)
+    .upsert(row, { onConflict: "week_code" })
+    .select("*")
+    .single();
 
-  await writeStore(db);
-  return week;
+  if (error) throw new Error(error.message);
+  return mapRowToWeek(data);
 }
 
 module.exports = {
