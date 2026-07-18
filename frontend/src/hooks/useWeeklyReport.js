@@ -149,6 +149,7 @@ export function useWeeklyReport() {
   const [ticketError, setTicketError] = useState("");
   const [theme, setTheme] = useState(getStoredTheme);
   const [autoSaveState, setAutoSaveState] = useState("idle");
+  const [autoSaveError, setAutoSaveError] = useState("");
   const [lastAutoSavedAt, setLastAutoSavedAt] = useState(null);
   const [activityHistory, setActivityHistory] = useState([]);
   const hasHydratedDataRef = useRef(false);
@@ -267,6 +268,7 @@ export function useWeeklyReport() {
       summary: summaryText,
     });
     setAutoSaveState("saved");
+    setAutoSaveError("");
     setLastAutoSavedAt(Date.now());
   }, [endDate, isRangeInvalid, sections, startDate, summaryText]);
 
@@ -304,9 +306,12 @@ export function useWeeklyReport() {
     if (loadingReport || isRangeInvalid) return;
 
     const timer = window.setTimeout(() => {
-      autoSaveCurrentWeek().catch(() => {
+      autoSaveCurrentWeek().catch((error) => {
         setAutoSaveState("error");
-        // Keep UI responsive even if a background save fails.
+        // Guarda o motivo real (ex.: erro do Supabase) para exibir na UI.
+        setAutoSaveError(String(error?.message || "Erro desconhecido ao salvar"));
+        // eslint-disable-next-line no-console
+        console.error("Falha no autosave:", error);
       });
     }, 700);
 
@@ -572,6 +577,102 @@ export function useWeeklyReport() {
     return duplicated;
   }, []);
 
+  // --- Gerenciamento de seções (temas) ---
+  const logSectionChange = useCallback((type, name) => {
+    setActivityHistory((prev) =>
+      [
+        {
+          id: crypto.randomUUID(),
+          type,
+          section: name,
+          title: name,
+          timestamp: Date.now(),
+        },
+        ...prev,
+      ].slice(0, 25)
+    );
+  }, []);
+
+  const addSection = useCallback(
+    (rawName) => {
+      const name = String(rawName || "").trim().slice(0, 80);
+      if (!name) return false;
+
+      let added = false;
+      setSections((prev) => {
+        const exists = prev.some(
+          (section) => String(section.name).trim().toLowerCase() === name.toLowerCase()
+        );
+        if (exists) return prev;
+        added = true;
+        return [...prev, { name, activities: [] }];
+      });
+
+      if (added) logSectionChange("section-add", name);
+      return added;
+    },
+    [logSectionChange]
+  );
+
+  const renameSection = useCallback(
+    (sectionIndex, rawName) => {
+      const name = String(rawName || "").trim().slice(0, 80);
+      if (!name) return false;
+
+      let renamed = false;
+      setSections((prev) => {
+        if (!prev[sectionIndex]) return prev;
+        if (prev[sectionIndex].name === name) return prev;
+        const duplicated = prev.some(
+          (section, index) =>
+            index !== sectionIndex &&
+            String(section.name).trim().toLowerCase() === name.toLowerCase()
+        );
+        if (duplicated) return prev;
+        renamed = true;
+        return prev.map((section, index) =>
+          index === sectionIndex ? { ...section, name } : section
+        );
+      });
+
+      if (renamed) logSectionChange("section-rename", name);
+      return renamed;
+    },
+    [logSectionChange]
+  );
+
+  const removeSection = useCallback(
+    (sectionIndex) => {
+      let removedName = "";
+      setSections((prev) => {
+        if (!prev[sectionIndex]) return prev;
+        removedName = prev[sectionIndex].name;
+        return prev.filter((_, index) => index !== sectionIndex);
+      });
+
+      if (removedName) logSectionChange("section-remove", removedName);
+      return Boolean(removedName);
+    },
+    [logSectionChange]
+  );
+
+  const moveSection = useCallback((sectionIndex, direction) => {
+    const step = Number(direction);
+    if (![1, -1].includes(step)) return false;
+
+    let moved = false;
+    setSections((prev) => {
+      const target = sectionIndex + step;
+      if (!prev[sectionIndex] || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[sectionIndex], next[target]] = [next[target], next[sectionIndex]];
+      moved = true;
+      return next;
+    });
+
+    return moved;
+  }, []);
+
   const totalManualActivities = useMemo(() => {
     return sections.reduce((acc, section) => acc + section.activities.length, 0);
   }, [sections]);
@@ -622,6 +723,7 @@ export function useWeeklyReport() {
     saveCurrentWeek,
     saving,
     autoSaveState,
+    autoSaveError,
     lastAutoSavedAt,
     theme,
     toggleTheme,
@@ -633,5 +735,9 @@ export function useWeeklyReport() {
     activityHistory,
     isRangeInvalid,
     duplicateActivity,
+    addSection,
+    renameSection,
+    removeSection,
+    moveSection,
   };
 }

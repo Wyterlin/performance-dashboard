@@ -214,7 +214,6 @@ async function fetchTicketSummary(options = {}) {
   // --- Conjuntos do período (uma busca por evento) ---
   const resolvedSet = await fetchByDateField("resolvido"); // resolvidos no período
   const concludedSet = await fetchByDateField("concluido"); // concluídos no período
-  const respondedSet = await fetchByDateField("primeiraInteracao"); // 1ª resposta no período
   const openedSet = await fetchByDateField("aberto"); // abertos no período
 
   // Colunas fechadas: status atual + evento no período.
@@ -227,7 +226,14 @@ async function fetchTicketSummary(options = {}) {
   );
 
   // --- Métricas de atendimento ---
-  const firstResponse = averageDurationMs(respondedSet, "aberto", "primeiraInteracao");
+  // 1ª resposta: dos chamados que chegaram no período, quanto tempo até a
+  // primeira interação. Usa o filtro por "aberto" (o filtro por
+  // primeiraInteracao não é suportado pela API e vinha sempre vazio).
+  // Complementa com os fechados no período que tenham primeira interação.
+  const firstResponseBase = dedupeTicketsById([...openedSet, ...resolvedSet, ...concludedSet]).filter(
+    (t) => t.primeiraInteracao
+  );
+  const firstResponse = averageDurationMs(firstResponseBase, "aberto", "primeiraInteracao");
   const resolution = averageDurationMs(resolvedSet, "aberto", "resolvido");
 
   // Cumprimento de SLA: resolvido dentro do prazo estipulado.
@@ -247,7 +253,7 @@ async function fetchTicketSummary(options = {}) {
   const resolutionRatePct = openedCount ? Math.round((closedUnique / openedCount) * 100) : null;
 
   // Prazos renegociados entre os chamados trabalhados no período.
-  const workedInPeriod = dedupeTicketsById([...resolvedSet, ...concludedSet, ...respondedSet, ...openedSet]);
+  const workedInPeriod = dedupeTicketsById([...resolvedSet, ...concludedSet, ...openedSet]);
   const renegotiated = workedInPeriod.filter(isRenegotiated).length;
 
   const summary = {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import ExportPickerModal from "./components/ExportPickerModal";
+import ManageSectionsModal from "./components/ManageSectionsModal";
 import SectionActivities from "./components/SectionActivities";
 import TicketSummaryCard from "./components/TicketSummaryCard";
 import { useWeeklyReport } from "./hooks/useWeeklyReport";
@@ -53,6 +54,7 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showExportPicker, setShowExportPicker] = useState(false);
+  const [showManageSections, setShowManageSections] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(getInitialSidebarHidden);
   const [activeNav, setActiveNav] = useState("sec-overview");
   const {
@@ -67,6 +69,7 @@ export default function App() {
     loadPeriodData,
     loadingReport,
     autoSaveState,
+    autoSaveError,
     lastAutoSavedAt,
     theme,
     toggleTheme,
@@ -76,6 +79,10 @@ export default function App() {
     deleteActivity,
     moveActivity,
     duplicateActivity,
+    addSection,
+    renameSection,
+    removeSection,
+    moveSection,
     isRangeInvalid,
   } = useWeeklyReport();
 
@@ -108,6 +115,7 @@ export default function App() {
     { id: "sec-tickets", icon: "▤", label: "Chamados SULTS" },
     { id: "sec-activities", icon: "◇", label: "Atividades" },
     ...(roadmapEntry ? [{ id: "sec-roadmap", icon: "✦", label: "Roadmap" }] : []),
+    { id: "manage", icon: "⚙", label: "Gerenciar Seções", action: "manage" },
   ];
   const navKey = navItems.map((item) => item.id).join("|");
 
@@ -274,7 +282,9 @@ export default function App() {
               key={item.id}
               type="button"
               className={`sidebar-nav-item ${activeNav === item.id ? "is-active" : ""}`}
-              onClick={() => navigate(item.id)}
+              onClick={() =>
+                item.action === "manage" ? setShowManageSections(true) : navigate(item.id)
+              }
             >
               <span className="nav-icon" aria-hidden="true">
                 {item.icon}
@@ -292,6 +302,11 @@ export default function App() {
             <span className="sidebar-foot-dot" aria-hidden="true" />
             <span>{autoSaveLabel}</span>
           </div>
+          {autoSaveState === "error" && autoSaveError ? (
+            <p className="sidebar-foot-error" title={autoSaveError}>
+              {autoSaveError}
+            </p>
+          ) : null}
         </div>
       </aside>
 
@@ -452,7 +467,11 @@ export default function App() {
             </article>
           </section>
 
-          <section id="sec-activities" className="search-filter-section">
+          <div id="sec-activities" className="section-divider">
+            <h2>Seções de Atividades</h2>
+          </div>
+
+          <section className="search-filter-section">
             <div className="search-filter-block">
               <label className="search-filter-field">
                 Filtrar Atividades
@@ -564,7 +583,7 @@ export default function App() {
           <footer className="site-footer" aria-label="Rodapé do site">
             <div className="site-footer-grid">
               <section className="footer-about">
-                <h3>{"</> ChristianW$"}</h3>
+                <h3>{"</> Christian Silveira"}</h3>
                 <p>Conectando código, café e criatividade.</p>
               </section>
 
@@ -618,7 +637,7 @@ export default function App() {
               </section>
             </div>
 
-            <p className="footer-bottom">ChristianW$ - Todos os direitos reservados.</p>
+            <p className="footer-bottom">Christian Silveira - Todos os direitos reservados.</p>
           </footer>
         </main>
       </div>
@@ -628,6 +647,17 @@ export default function App() {
           sections={sections}
           onCancel={() => setShowExportPicker(false)}
           onConfirm={handleConfirmExportPptx}
+        />
+      ) : null}
+
+      {showManageSections ? (
+        <ManageSectionsModal
+          sections={sections}
+          onAdd={addSection}
+          onRename={renameSection}
+          onRemove={removeSection}
+          onMove={moveSection}
+          onClose={() => setShowManageSections(false)}
         />
       ) : null}
 

@@ -256,6 +256,15 @@ a:hover {
   color: var(--goldL);
 }
 
+.sidebar-foot-error {
+  margin: 6px 0 0;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--danger);
+  max-height: 4.5em;
+  overflow: hidden;
+}
+
 /* Sidebar hidden state (desktop) */
 .app-layout.is-collapsed .sidebar {
   display: none;
@@ -303,6 +312,9 @@ a:hover {
 
 /* ---------- HERO ---------- */
 .hero-panel {
+  position: relative;
+  /* Acima dos painéis seguintes para o menu Exportar não ficar por baixo. */
+  z-index: 30;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -365,6 +377,7 @@ h3 {
 
 .export-menu {
   position: relative;
+  z-index: 50;
 }
 
 .export-summary {
@@ -423,7 +436,7 @@ h3 {
   border-radius: 12px;
   box-shadow: var(--shadow);
   padding: 0.5rem;
-  z-index: 41;
+  z-index: 80;
   animation: fade-in 0.15s ease;
 }
 
@@ -740,6 +753,11 @@ h3 {
 /* ---------- SEARCH / FILTERS ---------- */
 .search-filter-section {
   margin-top: 26px;
+}
+
+/* Logo após um divisor o espaçamento já vem dele. */
+.section-divider + .search-filter-section {
+  margin-top: 0;
 }
 
 .search-filter-block {
@@ -1372,6 +1390,66 @@ label small {
   color: var(--goldL);
 }
 
+/* ---------- GERENCIAR SEÇÕES ---------- */
+.manage-sections {
+  width: min(600px, 94vw);
+}
+
+.manage-sections-list {
+  display: grid;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.manage-sections-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.manage-sections-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.manage-sections-count {
+  font-size: 10.5px;
+  color: var(--dim);
+  flex: none;
+  white-space: nowrap;
+}
+
+.manage-sections-icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: none;
+  font-size: 12px;
+  display: grid;
+  place-items: center;
+}
+
+.manage-sections-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.manage-sections-add input {
+  flex: 1;
+  min-width: 0;
+}
+
+.manage-sections-add button {
+  flex: none;
+}
+
 /* ---------- HISTORY ---------- */
 .history-list {
   list-style: none;
@@ -1408,18 +1486,21 @@ label small {
   line-height: 1.5;
 }
 
-/* ---------- ROADMAP DIVIDER ---------- */
+/* ---------- DIVISOR DE BLOCO ---------- */
+.section-divider,
 .roadmap-divider {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin: 30px 0 12px;
+  margin: 38px 0 12px;
 }
 
+.section-divider h2,
 .roadmap-divider h2 {
   font-size: 21px;
 }
 
+.section-divider::after,
 .roadmap-divider::after {
   content: "";
   flex: 1;
