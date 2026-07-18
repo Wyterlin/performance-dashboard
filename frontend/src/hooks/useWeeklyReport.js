@@ -209,7 +209,15 @@ export function useWeeklyReport() {
     try {
       const periodKey = buildPeriodKey(startDate, endDate);
       const [weekResponse, defaultTopicsResponse] = await Promise.all([
-        getWeek(periodKey).catch(() => null),
+        getWeek(periodKey).catch((error) => {
+          // Semana ainda não existe (404) é o caso normal na primeira edição.
+          const message = String(error?.message || "");
+          if (!/not found/i.test(message)) {
+            // eslint-disable-next-line no-console
+            console.warn(`Falha ao carregar a semana ${periodKey}:`, message || error);
+          }
+          return null;
+        }),
         getDefaultTopics(),
       ]);
 
