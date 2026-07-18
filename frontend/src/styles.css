@@ -1249,6 +1249,129 @@ label small {
   font-size: 10px;
 }
 
+/* ---------- SELETOR DE CONTEÚDO DO PPT ---------- */
+.export-picker {
+  width: min(620px, 94vw);
+}
+
+.export-picker-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--line2);
+}
+
+.export-picker-toolbar .secondary-button {
+  padding: 7px 14px;
+  font-size: 11.5px;
+}
+
+.export-picker-list {
+  display: grid;
+  gap: 8px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.export-picker-section {
+  background: var(--panel2);
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.export-picker-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.export-picker-check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--body-c);
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+.export-picker-check input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+.export-picker-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.export-picker-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.export-picker-count {
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.export-picker-toggle {
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
+.export-picker-activities {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 0 0 10px;
+  display: grid;
+  gap: 6px;
+  border-left: 2px solid var(--goldln);
+}
+
+.export-picker-activities span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.export-picker-empty {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--dim);
+  font-style: italic;
+}
+
+.export-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line2);
+}
+
+.export-picker-summary {
+  font-size: 11.5px;
+  color: var(--goldL);
+}
+
 /* ---------- HISTORY ---------- */
 .history-list {
   list-style: none;

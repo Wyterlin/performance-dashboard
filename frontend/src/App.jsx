@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import ExportPickerModal from "./components/ExportPickerModal";
 import SectionActivities from "./components/SectionActivities";
 import TicketSummaryCard from "./components/TicketSummaryCard";
 import { useWeeklyReport } from "./hooks/useWeeklyReport";
@@ -51,6 +52,7 @@ export default function App() {
   const [roadmapDifficultyFilter, setRoadmapDifficultyFilter] = useState("all");
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showExportPicker, setShowExportPicker] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(getInitialSidebarHidden);
   const [activeNav, setActiveNav] = useState("sec-overview");
   const {
@@ -221,13 +223,20 @@ export default function App() {
     });
   }
 
-  async function handleExportPptx() {
+  function handleExportPptx() {
+    // Abre o seletor de conteúdo antes de gerar o arquivo.
+    exportMenuRef.current?.removeAttribute("open");
+    setShowExportPicker(true);
+  }
+
+  async function handleConfirmExportPptx(selectedSections) {
+    setShowExportPicker(false);
     const { exportDashboardPptx } = await import("./services/exportService");
     await exportDashboardPptx({
       startDate,
       endDate,
       ticketSummary,
-      sections,
+      sections: selectedSections,
     });
   }
 
@@ -613,6 +622,14 @@ export default function App() {
           </footer>
         </main>
       </div>
+
+      {showExportPicker ? (
+        <ExportPickerModal
+          sections={sections}
+          onCancel={() => setShowExportPicker(false)}
+          onConfirm={handleConfirmExportPptx}
+        />
+      ) : null}
 
       {showOnboarding ? (
         <section className="onboarding-overlay" role="dialog" aria-modal="true">
