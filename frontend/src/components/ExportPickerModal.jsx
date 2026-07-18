@@ -13,7 +13,8 @@ import {
  * Seleção de conteúdo do PowerPoint: permite marcar/desmarcar por tema (seção)
  * e por tarefa (atividade) antes de gerar o arquivo.
  */
-export default function ExportPickerModal({ sections, onCancel, onConfirm }) {
+export default function ExportPickerModal({ sections, format = "pptx", onCancel, onConfirm }) {
+  const formatLabel = format === "pdf" ? "PDF" : "PowerPoint";
   const [selection, setSelection] = useState(() => buildInitialSelection(sections));
   const [expanded, setExpanded] = useState({});
 
@@ -49,10 +50,10 @@ export default function ExportPickerModal({ sections, onCancel, onConfirm }) {
         className="activity-modal export-picker"
         role="dialog"
         aria-modal="true"
-        aria-label="Selecionar conteúdo do PowerPoint"
+        aria-label={`Selecionar conteúdo do ${formatLabel}`}
         onClick={(event) => event.stopPropagation()}
       >
-        <h3>Selecionar conteúdo do PowerPoint</h3>
+        <h3>Selecionar conteúdo do {formatLabel}</h3>
         <small className="shortcut-hint">
           Marque os temas e as tarefas que devem aparecer no relatório · Esc cancela
         </small>
@@ -141,7 +142,7 @@ export default function ExportPickerModal({ sections, onCancel, onConfirm }) {
               Cancelar
             </button>
             <button type="button" onClick={handleConfirm} disabled={totals.tarefas === 0}>
-              Gerar PowerPoint
+              Gerar {formatLabel}
             </button>
           </div>
         </div>

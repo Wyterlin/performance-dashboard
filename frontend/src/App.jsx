@@ -52,8 +52,8 @@ export default function App() {
   const [roadmapCategoryFilter, setRoadmapCategoryFilter] = useState("all");
   const [roadmapDifficultyFilter, setRoadmapDifficultyFilter] = useState("all");
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [showExportPicker, setShowExportPicker] = useState(false);
+  // null quando fechado; "pdf" ou "pptx" define o formato a gerar.
+  const [exportFormat, setExportFormat] = useState(null);
   const [showManageSections, setShowManageSections] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(getInitialSidebarHidden);
   const [activeNav, setActiveNav] = useState("sec-overview");
@@ -221,36 +221,35 @@ export default function App() {
     setShowOnboarding(false);
   }
 
-  async function handleExportPdf() {
-    const { exportDashboardPdf } = await import("./services/exportService");
-    await exportDashboardPdf({
-      startDate,
-      endDate,
-      ticketSummary,
-      sections,
-    });
+  // Ambos os formatos passam pelo seletor de conteúdo antes de gerar.
+  function openExportPicker(format) {
+    exportMenuRef.current?.removeAttribute("open");
+    setExportFormat(format);
+  }
+
+  function handleExportPdf() {
+    openExportPicker("pdf");
   }
 
   function handleExportPptx() {
-    // Abre o seletor de conteúdo antes de gerar o arquivo.
-    exportMenuRef.current?.removeAttribute("open");
-    setShowExportPicker(true);
+    openExportPicker("pptx");
   }
 
-  async function handleConfirmExportPptx(selectedSections) {
-    setShowExportPicker(false);
-    const { exportDashboardPptx } = await import("./services/exportService");
-    await exportDashboardPptx({
+  async function handleConfirmExport(selectedSections) {
+    const format = exportFormat;
+    setExportFormat(null);
+    const payload = {
       startDate,
       endDate,
       ticketSummary,
       sections: selectedSections,
-    });
-  }
-
-  function handleOpenHistory() {
-    exportMenuRef.current?.removeAttribute("open");
-    setShowHistoryModal(true);
+    };
+    const service = await import("./services/exportService");
+    if (format === "pdf") {
+      await service.exportDashboardPdf(payload);
+      return;
+    }
+    await service.exportDashboardPptx(payload);
   }
 
   return (
@@ -349,9 +348,6 @@ export default function App() {
                   </button>
                   <button type="button" className="secondary-button" onClick={handleExportPptx}>
                     Exportar PowerPoint
-                  </button>
-                  <button type="button" className="secondary-button" onClick={handleOpenHistory}>
-                    Log de Modificações
                   </button>
                 </div>
               </details>
@@ -642,11 +638,12 @@ export default function App() {
         </main>
       </div>
 
-      {showExportPicker ? (
+      {exportFormat ? (
         <ExportPickerModal
           sections={sections}
-          onCancel={() => setShowExportPicker(false)}
-          onConfirm={handleConfirmExportPptx}
+          format={exportFormat}
+          onCancel={() => setExportFormat(null)}
+          onConfirm={handleConfirmExport}
         />
       ) : null}
 
@@ -672,32 +669,6 @@ export default function App() {
         </section>
       ) : null}
 
-      {showHistoryModal ? (
-        <section className="history-overlay" role="dialog" aria-modal="true" aria-label="Histórico de atividades">
-          <article className="history-card">
-            <h2>Histórico Recente de Atividades</h2>
-            {activityHistory.length ? (
-              <ul className="history-list">
-                {activityHistory.slice(0, 25).map((entry) => (
-                  <li key={entry.id}>
-                    <strong>{entry.section}</strong>
-                    <span>
-                      {entry.type} - {entry.title} ({new Date(entry.timestamp).toLocaleString("pt-BR")})
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="empty-activities">Ainda não há movimentações registradas.</p>
-            )}
-            <div className="composer-actions">
-              <button type="button" className="secondary-button" onClick={() => setShowHistoryModal(false)}>
-                Fechar
-              </button>
-            </div>
-          </article>
-        </section>
-      ) : null}
     </div>
   );
 }

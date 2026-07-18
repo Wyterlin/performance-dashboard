@@ -1,4 +1,4 @@
-import jsPDF from "jspdf";
+import { jsPDF } from "jspdf";
 import PptxGenJS from "pptxgenjs";
 
 const PPT_THEME = {
@@ -25,6 +25,13 @@ function formatDateToBr(value) {
 
 function formatPeriodPpt(startDate, endDate) {
   return `${formatDateToBr(startDate)} até ${formatDateToBr(endDate)}`;
+}
+
+/** Nome padrão dos arquivos exportados: PD_Christian_Silveira_<periodo>.<ext> */
+function buildExportFileName(startDate, endDate, extension) {
+  const start = formatDateToBr(startDate).replace(/\//g, "-");
+  const end = formatDateToBr(endDate).replace(/\//g, "-");
+  return `PD_Christian_Silveira_${start}_a_${end}.${extension}`;
 }
 
 function statusRows(ticketSummary) {
@@ -379,451 +386,454 @@ export async function exportDashboardPdf({
   sections,
   options = {},
 }) {
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const margin = 42;
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const maxWidth = pageWidth - margin * 2;
-  const pdfMode = options.mode === "print" ? "print" : "standard";
-  const periodText = formatPeriod(startDate, endDate);
+  // Paisagem para espelhar o deck do PowerPoint.
+  const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const PADX = 48;
+  const CW = W - PADX * 2;
+
+  // jsPDF só embute fontes padrão: Times faz o papel da Playfair (serifada)
+  // e Helvetica o da Sora.
+  const SERIF = "times";
+  const SANS = "helvetica";
+
+  const watermarkEnabled = Boolean(options.watermark);
   const syncText = `Sincronização: SULTS API Service | ${formatSyncTimestamp()}`;
   const sectionKpis = manualSectionKpis(sections);
-  const rows = statusRows(ticketSummary);
-  const orderedSections = (sections || []).map((section) => ({
-    name: safeText(section?.name) || "Secao",
-    activities: sortActivitiesByPosition(section?.activities || []),
-  }));
-
+  const manualTotal = sectionKpis.reduce((acc, item) => acc + item.total, 0);
   const operationalTotal = Number(ticketSummary?.total || 0);
-  const repactTotal = Math.max(Number(ticketSummary?.totalCombined || 0) - operationalTotal, 0);
-  const manualTotal = sectionKpis.reduce((acc, cur) => acc + cur.total, 0);
-  const consolidatedTotal = Math.max(operationalTotal + manualTotal, 0);
-  const dynamic = buildDynamicPptNarrative(rows, operationalTotal, repactTotal, sectionKpis);
+  const renegotiated = Math.max(
+    Number(
+      ticketSummary?.renegotiated ?? Number(ticketSummary?.totalCombined || 0) - operationalTotal
+    ),
+    0
+  );
+  const consolidated = operationalTotal + manualTotal;
+  const rows = statusRows(ticketSummary);
+  const metrics = ticketSummary?.metrics || null;
 
   doc.setProperties({
-    title: `Performance Dashboard ${periodText}`,
-    subject: `Relatório semanal (${pdfMode})`,
-    author: "Performance Dashboard",
-    keywords: "dashboard, pdf, semanal, chamados",
+    title: `Performance Dashboard ${formatPeriodPpt(startDate, endDate)}`,
+    subject: "Relatório semanal",
+    author: "Christian Silveira",
+    keywords: "dashboard, relatorio, semanal, chamados",
   });
 
-  function drawFooterOnAllPages() {
-    const totalPages = doc.getNumberOfPages();
-    for (let page = 1; page <= totalPages; page += 1) {
-      doc.setPage(page);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      setTextFromHex(doc, "7A8792");
-      doc.text(syncText, margin, pageHeight - 18);
-      doc.text(`Página ${page}/${totalPages}`, pageWidth - margin, pageHeight - 18, { align: "right" });
+  let started = false;
+  function newPage() {
+    if (started) doc.addPage();
+    started = true;
+    setFillFromHex(doc, LX.bg);
+    doc.rect(0, 0, W, H, "F");
+    if (watermarkEnabled) {
+      setTextFromHex(doc, LX.line);
+      doc.setFont(SANS, "bold");
+      doc.setFontSize(52);
+      doc.text("CONFIDENCIAL", W / 2, H / 2, { align: "center", angle: 30 });
     }
   }
 
-  let y = 0;
-
-  function ensureSpace(requiredHeight) {
-    if (y + requiredHeight <= pageHeight - 44) return;
-    doc.addPage();
-    y = margin;
+  function footer() {
+    setTextFromHex(doc, LX.dim);
+    doc.setFont(SANS, "normal");
+    doc.setFontSize(7.5);
+    doc.text(syncText, PADX, H - 22);
   }
 
-  function startChapter(title, subtitle) {
-    doc.addPage();
-    y = margin;
-
-    setFillFromHex(doc, "EAF3FB");
-    setDrawFromHex(doc, "CFE1EE");
-    doc.roundedRect(margin, y, maxWidth, 44, 8, 8, "FD");
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    setTextFromHex(doc, PPT_THEME.baseDark);
-    doc.text(title, margin + 12, y + 18);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    setTextFromHex(doc, PPT_THEME.textMuted);
-    doc.text(subtitle, margin + 12, y + 34);
-
-    y += 58;
+  function panel(x, y, w, h, { fill = LX.panel, border = LX.line } = {}) {
+    setFillFromHex(doc, fill);
+    setDrawFromHex(doc, border);
+    doc.setLineWidth(0.8);
+    doc.roundedRect(x, y, w, h, 8, 8, "FD");
   }
 
-  // CAPA (pagina dedicada)
-  setFillFromHex(doc, PPT_THEME.sapBlue);
-  doc.rect(0, 0, pageWidth, 118, "F");
-  setFillFromHex(doc, PPT_THEME.attentionOrange);
-  doc.rect(margin, 78, 180, 2.5, "F");
+  function header({ eyebrow, title, number }) {
+    let left = PADX;
+    if (number) {
+      setTextFromHex(doc, LX.gold);
+      doc.setFont(SERIF, "bold");
+      doc.setFontSize(20);
+      doc.text(number, PADX, 62);
+      left = PADX + 40;
+    }
+    setTextFromHex(doc, LX.gold);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(8.5);
+    doc.text(String(eyebrow || "").toUpperCase(), left, 48, { charSpace: 1.6 });
+    setTextFromHex(doc, LX.ink);
+    doc.setFont(SERIF, "bold");
+    doc.setFontSize(25);
+    doc.text(safeText(title), left, 76);
+  }
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(24);
-  setTextFromHex(doc, PPT_THEME.white);
-  doc.text("Performance Dashboard", margin, 48);
+  function accent(x, y, color, w = 34) {
+    setFillFromHex(doc, color);
+    doc.rect(x, y, w, 3, "F");
+  }
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(12);
-  doc.text("Relatório executivo de operações e sustentação", margin, 68);
-  doc.text(`Período analisado: ${periodText}`, margin, 94);
+  // ---------- 1. CAPA ----------
+  newPage();
+  setTextFromHex(doc, LX.gold);
+  doc.setFont(SANS, "bold");
+  doc.setFontSize(10);
+  doc.text("RELATÓRIO SEMANAL", W / 2, 178, { align: "center", charSpace: 5 });
 
-  setFillFromHex(doc, "FFFFFF");
-  setDrawFromHex(doc, "D6E1EA");
-  doc.roundedRect(margin, 152, maxWidth, 110, 10, 10, "FD");
-  doc.setFont("helvetica", "bold");
+  doc.setFont(SERIF, "bold");
+  doc.setFontSize(40);
+  const part1 = "Apresentação de ";
+  const part2 = "Atividades";
+  const w1 = doc.getTextWidth(part1);
+  doc.setFont(SERIF, "bolditalic");
+  const w2 = doc.getTextWidth(part2);
+  const titleX = (W - (w1 + w2)) / 2;
+  doc.setFont(SERIF, "bold");
+  setTextFromHex(doc, LX.ink);
+  doc.text(part1, titleX, 232);
+  doc.setFont(SERIF, "bolditalic");
+  setTextFromHex(doc, LX.goldL);
+  doc.text(part2, titleX + w1, 232);
+
+  setTextFromHex(doc, LX.muted);
+  doc.setFont(SANS, "normal");
   doc.setFontSize(13);
-  setTextFromHex(doc, PPT_THEME.baseDark);
-  doc.text("Mensagem executiva", margin + 14, 176);
-  doc.setFont("helvetica", "normal");
+  doc.text("Central de inteligência operacional", W / 2, 262, { align: "center" });
+
+  const pillW = 250;
+  const pillH = 34;
+  const pillX = (W - pillW) / 2;
+  setFillFromHex(doc, LX.panel);
+  setDrawFromHex(doc, LX.gold);
+  doc.setLineWidth(0.9);
+  doc.roundedRect(pillX, 292, pillW, pillH, pillH / 2, pillH / 2, "FD");
+  setTextFromHex(doc, LX.body);
+  doc.setFont(SANS, "normal");
   doc.setFontSize(11);
-  setTextFromHex(doc, "4F5F6D");
-  doc.text(doc.splitTextToSize(dynamic.message, maxWidth - 28), margin + 14, 198);
+  doc.text(
+    `${formatDateToBr(startDate)}   ·   ${formatDateToBr(endDate)}`,
+    W / 2,
+    292 + pillH / 2 + 4,
+    { align: "center" }
+  );
 
-  // SUMARIO (pagina dedicada)
-  startChapter("Sumário executivo", "Visão geral dos capítulos e seções do relatório");
+  setTextFromHex(doc, LX.dim);
+  doc.setFontSize(9.5);
+  doc.text("</>  Christian Silveira", W / 2, H - 70, { align: "center" });
+  footer();
 
-  const chapterRows = [
-    { title: "Capa", detail: "Contexto e período analisado" },
-    { title: "Sumário executivo", detail: "Estrutura e distribuição das seções" },
-    { title: "Métricas estratégicas", detail: "KPI consolidado, operacionais e atividades" },
-    { title: "Painel de status (SULTS)", detail: "Distribuição de volume e prazos renegociados por status" },
-    { title: "Atividades por seção", detail: "Detalhamento por tema" },
-  ];
+  // ---------- 2. RESUMO EXECUTIVO ----------
+  newPage();
+  header({ eyebrow: "Visão consolidada", title: "Resumo Executivo" });
 
-  chapterRows.forEach((item) => {
-    ensureSpace(30);
-    setFillFromHex(doc, "FFFFFF");
-    setDrawFromHex(doc, "D6E1EA");
-    doc.roundedRect(margin, y, maxWidth, 24, 6, 6, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    setTextFromHex(doc, PPT_THEME.baseDark);
-    doc.text(item.title, margin + 10, y + 16);
-    doc.setFont("helvetica", "normal");
+  const gap = 16;
+  const unit = (CW - gap * 3) / 4.35;
+  const wide = unit * 1.35;
+  const kY = 118;
+  const kH = 132;
+
+  panel(PADX, kY, wide, kH, { fill: LX.deep, border: LX.gold });
+  setTextFromHex(doc, "C9D2FF");
+  doc.setFont(SANS, "normal");
+  doc.setFontSize(8);
+  doc.text("INDICADOR CONSOLIDADO", PADX + 18, kY + 26, { charSpace: 1.2 });
+  setTextFromHex(doc, LX.goldL);
+  doc.setFont(SERIF, "bold");
+  doc.setFontSize(38);
+  doc.text(String(consolidated), PADX + 18, kY + 76);
+  setTextFromHex(doc, "8D97C8");
+  doc.setFont(SANS, "normal");
+  doc.setFontSize(8);
+  doc.text("chamados + atividades no período", PADX + 18, kY + 104);
+
+  [
+    { label: "Volume Operacional", value: operationalTotal, color: LX.blue },
+    { label: "Prazos Renegociados", value: renegotiated, color: LX.gold },
+    { label: "Atividades Registradas", value: manualTotal, color: LX.blue },
+  ].forEach((item, index) => {
+    const x = PADX + wide + gap + index * (unit + gap);
+    panel(x, kY, unit, kH);
+    setTextFromHex(doc, LX.muted);
+    doc.setFont(SANS, "normal");
     doc.setFontSize(9);
-    setTextFromHex(doc, PPT_THEME.textMuted);
-    doc.text(item.detail, margin + 220, y + 16);
-    y += 30;
+    doc.text(item.label, x + 16, kY + 26);
+    setTextFromHex(doc, LX.ink);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(28);
+    doc.text(String(item.value), x + 16, kY + 74);
+    accent(x + 16, kY + 92, item.color);
   });
+  footer();
 
-  ensureSpace(26);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  setTextFromHex(doc, PPT_THEME.baseDark);
-  doc.text("Seções monitoradas", margin, y + 12);
-  y += 20;
+  // ---------- 3. CHAMADOS SULTS ----------
+  newPage();
+  header({ eyebrow: "Suporte · sincronização SULTS", title: "Chamados SULTS" });
 
-  orderedSections.forEach((section) => {
-    ensureSpace(30);
-    setFillFromHex(doc, "FFFFFF");
-    setDrawFromHex(doc, "D6E1EA");
-    doc.roundedRect(margin, y, maxWidth, 24, 6, 6, "FD");
-    doc.setFont("helvetica", "bold");
+  const sCols = 3;
+  const sGap = 14;
+  const sW = (CW - sGap * (sCols - 1)) / sCols;
+  const sH = 84;
+  rows.slice(0, 6).forEach((row, index) => {
+    const col = index % sCols;
+    const line = Math.floor(index / sCols);
+    const x = PADX + col * (sW + sGap);
+    const y = 120 + line * (sH + sGap);
+    const isGold = normalizeText(row.status).includes("conclu");
+    panel(x, y, sW, sH, { border: isGold ? LX.gold : LX.blue });
+    setTextFromHex(doc, isGold ? LX.goldL : LX.muted);
+    doc.setFont(SANS, "normal");
     doc.setFontSize(10);
-    setTextFromHex(doc, PPT_THEME.baseDark);
-    doc.text(section.name, margin + 10, y + 16);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    setTextFromHex(doc, PPT_THEME.textMuted);
-    doc.text(`Atividades: ${section.activities.length}`, margin + maxWidth - 160, y + 16);
-    y += 30;
+    doc.text(safeText(row.status), x + 16, y + sH / 2 + 4);
+    setTextFromHex(doc, isGold ? LX.goldL : LX.ink);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(24);
+    doc.text(String(row.primary), x + sW - 16, y + sH / 2 + 8, { align: "right" });
   });
+  setTextFromHex(doc, LX.muted);
+  doc.setFont(SANS, "normal");
+  doc.setFontSize(10);
+  doc.text(
+    `${operationalTotal} chamados no período · ${renegotiated} com prazo renegociado`,
+    PADX,
+    120 + 2 * (sH + sGap) + 26
+  );
+  footer();
 
-  // CAPITULO: KPIs
-  startChapter("Métricas estratégicas", "Indicadores de desempenho consolidados");
+  // ---------- 4. INDICADORES DE ATENDIMENTO ----------
+  if (metrics) {
+    newPage();
+    header({ eyebrow: "Qualidade do atendimento", title: "Indicadores de Atendimento" });
 
-  const kpiCards = [
-    {
-      labelLine1: "Indicador consolidado",
-      labelLine2: "Volume + atividades",
-      value: consolidatedTotal,
-      fill: "EAF3FB",
-      border: "C6DBEC",
-      valueColor: PPT_THEME.sapBlue,
-    },
-    {
-      labelLine1: "Volume operacional",
-      labelLine2: "Chamados ativos",
-      value: operationalTotal,
-      fill: "FFFFFF",
-      border: "D7E2EA",
-      valueColor: PPT_THEME.sapBlue,
-    },
-    {
-      labelLine1: "Prazos renegociados",
-      labelLine2: "Impacto de prazo",
-      value: repactTotal,
-      fill: "FFF2E7",
-      border: "F5C9A8",
-      valueColor: PPT_THEME.attentionOrange,
-    },
-    ...sectionKpis.map((kpi) => ({
-      labelLine1: "Total de atividades",
-      labelLine2: kpi.name,
-      value: kpi.total,
-      fill: "FFFFFF",
-      border: "D7E2EA",
-      valueColor: PPT_THEME.baseDark,
-    })),
-  ];
-
-  const cardGap = 12;
-  const cardWidth = (maxWidth - cardGap) / 2;
-  const cardHeight = 70;
-
-  for (let i = 0; i < kpiCards.length; i += 2) {
-    ensureSpace(cardHeight + 10);
-
-    for (let col = 0; col < 2; col += 1) {
-      const card = kpiCards[i + col];
-      if (!card) continue;
-
-      const x = margin + col * (cardWidth + cardGap);
-      setFillFromHex(doc, card.fill);
-      setDrawFromHex(doc, card.border);
-      doc.roundedRect(x, y, cardWidth, cardHeight, 8, 8, "FD");
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      setTextFromHex(doc, PPT_THEME.textMuted);
-      doc.text(card.labelLine1, x + 12, y + 18);
-      doc.text(card.labelLine2, x + 12, y + 32);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(22);
-      setTextFromHex(doc, card.valueColor);
-      doc.text(String(card.value), x + cardWidth - 12, y + 46, { align: "right" });
-    }
-
-    y += cardHeight + 10;
+    const items = [
+      {
+        label: "Tempo de 1a Resposta",
+        value: formatDurationPpt(metrics.firstResponseMs),
+        sub: `média · ${Number(metrics.firstResponseCount || 0)} chamados`,
+        color: LX.blue,
+      },
+      {
+        label: "Tempo de Resolução",
+        value: formatDurationPpt(metrics.resolutionMs),
+        sub: `média · ${Number(metrics.resolutionCount || 0)} resolvidos`,
+        color: LX.blue,
+      },
+      {
+        label: "Cumprimento de SLA",
+        value: metrics.slaPct == null ? "-" : `${metrics.slaPct}%`,
+        sub: `${Number(metrics.slaWithin || 0)}/${Number(metrics.slaTotal || 0)} no prazo`,
+        color: LX.gold,
+      },
+      {
+        label: "Satisfação (CSAT)",
+        value: metrics.csatAvg == null ? "-" : `${Number(metrics.csatAvg).toFixed(1)}/5`,
+        sub: `${Number(metrics.csatCount || 0)} avaliações`,
+        color: LX.gold,
+      },
+      {
+        label: "Taxa de Resolução",
+        value: metrics.resolutionRatePct == null ? "-" : `${metrics.resolutionRatePct}%`,
+        sub: `${Number(metrics.closedInPeriod || 0)} fechados · ${Number(metrics.openedInPeriod || 0)} abertos`,
+        color: LX.blue,
+      },
+    ];
+    const mGap = 12;
+    const mW = (CW - mGap * 4) / 5;
+    items.forEach((item, index) => {
+      const x = PADX + index * (mW + mGap);
+      const y = 126;
+      panel(x, y, mW, 118);
+      setTextFromHex(doc, LX.muted);
+      doc.setFont(SANS, "normal");
+      doc.setFontSize(8.5);
+      doc.text(doc.splitTextToSize(item.label, mW - 24), x + 12, y + 22);
+      setTextFromHex(doc, LX.ink);
+      doc.setFont(SERIF, "bold");
+      doc.setFontSize(20);
+      doc.text(item.value, x + 12, y + 66);
+      accent(x + 12, y + 80, item.color, 28);
+      setTextFromHex(doc, LX.dim);
+      doc.setFont(SANS, "normal");
+      doc.setFontSize(7.5);
+      doc.text(doc.splitTextToSize(item.sub, mW - 24), x + 12, y + 98);
+    });
+    footer();
   }
 
-  // CAPITULO: STATUS
-  startChapter("Painel de status (SULTS)", "Volume principal e prazos renegociados por status");
+  // ---------- 5..N. SEÇÕES ----------
+  const populated = (sections || []).filter(
+    (section) =>
+      !isRoadmapSectionName(section?.name) &&
+      Array.isArray(section.activities) &&
+      section.activities.length > 0
+  );
 
-  rows.forEach((row) => {
-    ensureSpace(28);
-    setFillFromHex(doc, "FFFFFF");
-    setDrawFromHex(doc, "D6E1EA");
-    doc.roundedRect(margin, y, maxWidth, 24, 6, 6, "FD");
+  populated.forEach((section, sectionIndex) => {
+    const activities = sortActivitiesByPosition(section.activities || []);
+    const pages = chunkList(activities, 4);
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    setTextFromHex(doc, PPT_THEME.baseDark);
-    doc.text(safeText(row.status) || "Status", margin + 10, y + 16);
+    pages.forEach((pageItems, pageIndex) => {
+      newPage();
+      header({
+        eyebrow: "Seção de atividades",
+        title: section.name,
+        number: String(sectionIndex + 1).padStart(2, "0"),
+      });
+      if (pages.length > 1) {
+        setTextFromHex(doc, LX.dim);
+        doc.setFont(SANS, "normal");
+        doc.setFontSize(9);
+        doc.text(`${pageIndex + 1}/${pages.length}`, W - PADX, 76, { align: "right" });
+      }
 
-    doc.setFont("helvetica", "bold");
-    doc.text(`Volume: ${row.primary}`, margin + maxWidth - 120, y + 16);
+      const aGap = 16;
+      const aW = (CW - aGap) / 2;
+      const aH = 176;
+      pageItems.forEach((activity, index) => {
+        const col = index % 2;
+        const line = Math.floor(index / 2);
+        const x = PADX + col * (aW + aGap);
+        const y = 112 + line * (aH + aGap);
+        const highlight = safeText(activity?.highlight);
+        const color = highlight ? LX.gold : LX.blue;
 
-    y += 30;
+        panel(x, y, aW, aH);
+        setFillFromHex(doc, color);
+        doc.rect(x, y, 3.5, aH, "F");
+
+        setTextFromHex(doc, LX.ink);
+        doc.setFont(SANS, "bold");
+        doc.setFontSize(12);
+        doc.text(doc.splitTextToSize(safeText(activity?.title) || "Atividade", aW - 40), x + 18, y + 26);
+
+        setTextFromHex(doc, LX.muted);
+        doc.setFont(SANS, "normal");
+        doc.setFontSize(9.5);
+        const desc = doc.splitTextToSize(preserveMultiline(activity?.activity) || "", aW - 40);
+        doc.text(desc.slice(0, 4), x + 18, y + 50);
+
+        const chips = [];
+        if (safeText(activity?.called)) chips.push(`Chamado ${safeText(activity.called)}`);
+        if (safeText(activity?.cycleTime)) chips.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
+        if (Array.isArray(activity?.projectTeam) && activity.projectTeam.length) {
+          chips.push(`Equipe: ${activity.projectTeam.join(", ")}`);
+        }
+        if (chips.length) {
+          setTextFromHex(doc, LX.blueL);
+          doc.setFontSize(8);
+          doc.text(doc.splitTextToSize(chips.join("   ·   "), aW - 40).slice(0, 2), x + 18, y + aH - 46);
+        }
+        if (highlight) {
+          setTextFromHex(doc, LX.goldL);
+          doc.setFontSize(8.5);
+          doc.text(doc.splitTextToSize(`» ${highlight}`, aW - 40).slice(0, 2), x + 18, y + aH - 22);
+        }
+      });
+      footer();
+    });
   });
 
-  ensureSpace(130);
-  setFillFromHex(doc, "FFFFFF");
-  setDrawFromHex(doc, "D6E1EA");
-  doc.roundedRect(margin, y, maxWidth, 54, 8, 8, "FD");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  setTextFromHex(doc, PPT_THEME.baseDark);
-  doc.text("Mensagem-chave", margin + 12, y + 18);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  setTextFromHex(doc, "4F5F6D");
-  doc.text(doc.splitTextToSize(dynamic.message, maxWidth - 24), margin + 12, y + 34);
-  y += 62;
-
-  setFillFromHex(doc, "FFFFFF");
-  setDrawFromHex(doc, "D6E1EA");
-  doc.roundedRect(margin, y, maxWidth, 54, 8, 8, "FD");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  setTextFromHex(doc, PPT_THEME.baseDark);
-  doc.text("Destaque técnico", margin + 12, y + 18);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  setTextFromHex(doc, "4F5F6D");
-  doc.text(doc.splitTextToSize(dynamic.technicalRead, maxWidth - 24), margin + 12, y + 34);
-  // CAPITULO: ATIVIDADES
-  startChapter("Atividades por seção", "Detalhamento das entregas registradas");
-
-  for (const section of orderedSections) {
-    const activities = section.activities;
-    const sectionName = section.name;
-
-    ensureSpace(30);
-    setFillFromHex(doc, "EAF3FB");
-    setDrawFromHex(doc, "CFE1EE");
-    doc.roundedRect(margin, y, maxWidth, 24, 6, 6, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    setTextFromHex(doc, PPT_THEME.baseDark);
-    doc.text(`${sectionName} (${activities.length})`, margin + 10, y + 16);
-    y += 30;
-
-    if (!activities.length) {
-      ensureSpace(20);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      setTextFromHex(doc, PPT_THEME.textMuted);
-      doc.text("Nenhuma atividade registrada.", margin + 10, y + 12);
-      y += 20;
-      continue;
-    }
-
-    for (const activity of activities) {
-      const title = safeText(activity?.title) || "Atividade";
-      const description = preserveMultiline(activity?.activity) || "Sem descrição.";
-      const highlight = preserveMultiline(activity?.highlight);
-      const called = String(activity?.called || "").replace(/\D+/g, "");
-      const cycleImplantation = safeText(activity?.cycleImplantation);
-      const cycleTime = safeText(activity?.cycleTime);
-      const projectTeam = Array.isArray(activity?.projectTeam)
-        ? activity.projectTeam.map((item) => safeText(item)).filter(Boolean).join(", ")
-        : "";
-
-      const titleLines = doc.splitTextToSize(title, maxWidth - 44);
-      const descLines = splitPdfTextPreserveBreaks(doc, description, maxWidth - 44);
-      const calledLines = called
-        ? splitPdfTextPreserveBreaks(doc, `Chamado: ${called}`, maxWidth - 44)
-        : [];
-      const cycleTimeLines = cycleTime
-        ? splitPdfTextPreserveBreaks(doc, `Tempo de Ciclo (Cycle Time): ${cycleTime}`, maxWidth - 44)
-        : [];
-      const cycleImplantationLines = cycleImplantation
-        ? splitPdfTextPreserveBreaks(doc, `Ciclo de Implantação: ${cycleImplantation}`, maxWidth - 44)
-        : [];
-      const projectTeamLines = projectTeam
-        ? splitPdfTextPreserveBreaks(doc, `Equipe do Projeto: ${projectTeam}`, maxWidth - 44)
-        : [];
-      const highlightLines = highlight
-        ? splitPdfTextPreserveBreaks(doc, `Pontos a Destacar: ${highlight}`, maxWidth - 44)
-        : [];
-      const blockHeight =
-        18 +
-        titleLines.length * 11 +
-        (calledLines.length ? calledLines.length * 10 + 4 : 0) +
-        descLines.length * 11 +
-        (cycleTimeLines.length ? cycleTimeLines.length * 10 + 4 : 0) +
-        (cycleImplantationLines.length ? cycleImplantationLines.length * 10 + 4 : 0) +
-        (projectTeamLines.length ? projectTeamLines.length * 10 + 4 : 0) +
-        (highlightLines.length ? highlightLines.length * 10 + 6 : 0) +
-        12;
-
-      ensureSpace(blockHeight + 8);
-      setFillFromHex(doc, "FFFFFF");
-      setDrawFromHex(doc, "D6E1EA");
-      doc.roundedRect(margin, y, maxWidth, blockHeight, 6, 6, "FD");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      setTextFromHex(doc, PPT_THEME.baseDark);
-      doc.text(titleLines, margin + 12, y + 16);
-
-      let textY = y + 16 + titleLines.length * 11;
-      if (calledLines.length) {
-        doc.setFont("helvetica", "bold");
+  // ---------- ROADMAP ----------
+  const roadmapItems = roadmapItemsFromSections(sections);
+  if (roadmapItems.length) {
+    const pages = chunkList(roadmapItems, 3);
+    pages.forEach((pageItems, pageIndex) => {
+      newPage();
+      header({ eyebrow: "Próximos passos", title: "Roadmap de Ações" });
+      if (pages.length > 1) {
+        setTextFromHex(doc, LX.dim);
+        doc.setFont(SANS, "normal");
         doc.setFontSize(9);
-        setTextFromHex(doc, PPT_THEME.sapBlue);
-        doc.text(calledLines, margin + 12, textY + 1);
-        textY += calledLines.length * 10 + 4;
+        doc.text(`${pageIndex + 1}/${pages.length}`, W - PADX, 76, { align: "right" });
       }
 
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      setTextFromHex(doc, "4F5F6D");
-      doc.text(descLines, margin + 12, textY);
-      textY += descLines.length * 11;
+      const rGap = 14;
+      const rW = (CW - rGap * 2) / 3;
+      const rH = 300;
+      pageItems.forEach((item, index) => {
+        const x = PADX + index * (rW + rGap);
+        const y = 112;
+        const diffColor =
+          item.difficulty === "high" ? LX.danger : item.difficulty === "low" ? LX.ok : LX.goldL;
+        const diffLabel =
+          item.difficulty === "high" ? "Alta" : item.difficulty === "low" ? "Baixa" : "Média";
 
-      if (cycleTimeLines.length) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        setTextFromHex(doc, PPT_THEME.baseDark);
-        doc.text(cycleTimeLines, margin + 12, textY + 4);
-        textY += cycleTimeLines.length * 10 + 4;
-      }
+        panel(x, y, rW, rH, { border: LX.gold });
+        setTextFromHex(doc, LX.ink);
+        doc.setFont(SANS, "bold");
+        doc.setFontSize(12);
+        doc.text(doc.splitTextToSize(safeText(item.title) || "Item", rW - 32), x + 16, y + 26);
 
-      if (cycleImplantationLines.length) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        setTextFromHex(doc, PPT_THEME.baseDark);
-        doc.text(cycleImplantationLines, margin + 12, textY + 4);
-        textY += cycleImplantationLines.length * 10 + 4;
-      }
+        // chips em pílula
+        const chipDefs = [
+          { label: `Dificuldade: ${diffLabel}`, color: diffColor },
+          ...(item.category ? [{ label: item.category, color: LX.blueL }] : []),
+          ...(item.cycleImplantation ? [{ label: `Ciclo: ${item.cycleImplantation}`, color: LX.muted }] : []),
+        ];
+        let chipX = x + 16;
+        let chipY = y + 44;
+        doc.setFont(SANS, "normal");
+        doc.setFontSize(7.5);
+        chipDefs.forEach((chip) => {
+          const chipW = Math.min(doc.getTextWidth(chip.label) + 16, rW - 32);
+          if (chipX + chipW > x + rW - 16) {
+            chipX = x + 16;
+            chipY += 24;
+          }
+          setFillFromHex(doc, LX.panel2);
+          setDrawFromHex(doc, chip.color);
+          doc.setLineWidth(0.7);
+          doc.roundedRect(chipX, chipY, chipW, 17, 8.5, 8.5, "FD");
+          setTextFromHex(doc, chip.color);
+          doc.text(chip.label, chipX + chipW / 2, chipY + 11.5, { align: "center" });
+          chipX += chipW + 6;
+        });
 
-      if (projectTeamLines.length) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
-        setTextFromHex(doc, PPT_THEME.sapBlue);
-        doc.text(projectTeamLines, margin + 12, textY + 4);
-        textY += projectTeamLines.length * 10 + 4;
-      }
-
-      if (highlightLines.length) {
-        setTextFromHex(doc, PPT_THEME.attentionOrange);
-        doc.text(highlightLines, margin + 12, textY + 4);
-      }
-
-      y += blockHeight + 8;
-    }
+        let cursor = chipY + 38;
+        if (item.subtitle) {
+          setTextFromHex(doc, LX.muted);
+          doc.setFont(SANS, "italic");
+          doc.setFontSize(9.5);
+          const sub = doc.splitTextToSize(item.subtitle, rW - 32);
+          doc.text(sub.slice(0, 2), x + 16, cursor);
+          cursor += 14 * Math.min(sub.length, 2) + 8;
+        }
+        if (item.impact) {
+          setTextFromHex(doc, LX.body);
+          doc.setFont(SANS, "normal");
+          doc.setFontSize(9.5);
+          const impact = doc.splitTextToSize(`Impacto: ${item.impact}`, rW - 32);
+          const maxLines = Math.max(Math.floor((y + rH - 16 - cursor) / 13), 1);
+          doc.text(impact.slice(0, maxLines), x + 16, cursor);
+        }
+      });
+      footer();
+    });
   }
 
-  ensureSpace(104);
-  dynamic.closingBlocks.forEach((block) => {
-    ensureSpace(84);
-    setFillFromHex(doc, "FFFFFF");
-    setDrawFromHex(doc, "D6E1EA");
-    doc.roundedRect(margin, y, maxWidth, 76, 8, 8, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    setTextFromHex(doc, PPT_THEME.sapBlue);
-    doc.text(block.title, margin + 12, y + 18);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    setTextFromHex(doc, "4F5F6D");
-    doc.text(doc.splitTextToSize(block.text, maxWidth - 24), margin + 12, y + 36);
-    y += 84;
+  // ---------- ENCERRAMENTO ----------
+  newPage();
+  setTextFromHex(doc, LX.gold);
+  doc.setFont(SANS, "bold");
+  doc.setFontSize(10);
+  doc.text(`RELATÓRIO SEMANAL · ${formatPeriodPpt(startDate, endDate)}`, W / 2, 210, {
+    align: "center",
+    charSpace: 3,
   });
-
-  startChapter("Apêndice de dados", "Resumo bruto de status e atividades por seção");
-
-  ensureSpace(24);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  setTextFromHex(doc, PPT_THEME.baseDark);
-  doc.text("Status monitorados", margin, y + 12);
-  y += 20;
-
-  rows.forEach((row) => {
-    ensureSpace(22);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    setTextFromHex(doc, "4F5F6D");
-    doc.text(
-      `${safeText(row.status)} | Volume: ${row.primary}`,
-      margin,
-      y + 12
-    );
-    y += 20;
+  setTextFromHex(doc, LX.ink);
+  doc.setFont(SERIF, "bold");
+  doc.setFontSize(38);
+  doc.text("Obrigado", W / 2, 268, { align: "center" });
+  setTextFromHex(doc, LX.muted);
+  doc.setFont(SANS, "normal");
+  doc.setFontSize(13);
+  doc.text("Perguntas e próximos passos", W / 2, 298, { align: "center" });
+  setTextFromHex(doc, LX.goldL);
+  doc.setFontSize(10);
+  doc.text("</>  Christian Silveira   ·   Conectando código, café e criatividade", W / 2, 350, {
+    align: "center",
   });
+  footer();
 
-  ensureSpace(24);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  setTextFromHex(doc, PPT_THEME.baseDark);
-  doc.text("Atividades por seção", margin, y + 12);
-  y += 20;
-
-  orderedSections.forEach((section) => {
-    ensureSpace(22);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    setTextFromHex(doc, "4F5F6D");
-    doc.text(`${section.name}: ${section.activities.length}`, margin, y + 12);
-    y += 20;
-  });
-
-  drawFooterOnAllPages();
-
-  const pdfSuffix = pdfMode === "print" ? "-impressao" : "";
-  doc.save(`performance-dashboard-${startDate || "inicio"}-${endDate || "fim"}${pdfSuffix}.pdf`);
+  doc.save(buildExportFileName(startDate, endDate, "pdf"));
 }
 
 // ---------------------------------------------------------------------------
@@ -998,12 +1008,12 @@ export async function exportDashboardPptx({
     ],
     {
       x: 0,
-      y: 2.6,
+      y: 2.52,
       w: SLIDE_W,
-      h: 1.05,
+      h: 1.2,
       align: "center",
       fontFace: TITLE_FONT,
-      fontSize: 46,
+      fontSize: 54,
     }
   );
   cover.addText("Central de inteligência operacional", {
@@ -1146,22 +1156,26 @@ export async function exportDashboardPptx({
       fill: LX.panel,
       border: isGold ? LX.gold : LX.blue,
     });
+    // Layout horizontal: rótulo à esquerda, número à direita (igual ao deck).
     statusSlide.addText(safeText(row.status), {
-      x: x + 0.3,
-      y: y + 0.28,
-      w: cardW - 0.6,
-      h: 0.45,
+      x: x + 0.32,
+      y,
+      w: cardW - 1.5,
+      h: cardH,
+      valign: "middle",
       fontFace: BODY_FONT,
-      fontSize: 12,
+      fontSize: 13,
       color: isGold ? LX.goldL : LX.muted,
     });
     statusSlide.addText(String(row.primary), {
-      x: x + 0.3,
-      y: y + 0.72,
-      w: cardW - 0.6,
-      h: 0.6,
+      x: x + cardW - 1.45,
+      y,
+      w: 1.15,
+      h: cardH,
+      valign: "middle",
+      align: "right",
       fontFace: BODY_FONT,
-      fontSize: 28,
+      fontSize: 32,
       bold: true,
       color: isGold ? LX.goldL : LX.ink,
     });
@@ -1411,19 +1425,51 @@ export async function exportDashboardPptx({
           bold: true,
           color: LX.ink,
         });
-        slide.addText(`Dificuldade: ${diffLabel}${item.category ? `  ·  ${item.category}` : ""}`, {
-          x: x + 0.3,
-          y: y + 0.92,
-          w: rW - 0.6,
-          h: 0.3,
-          fontFace: BODY_FONT,
-          fontSize: 9.5,
-          color: diffColor,
+        // Chips em pílula (dificuldade, categoria, ciclo) como no deck.
+        const chips = [
+          { label: `Dificuldade: ${diffLabel}`, color: diffColor },
+          ...(item.category ? [{ label: item.category, color: LX.blueL }] : []),
+          ...(item.cycleImplantation ? [{ label: `Ciclo: ${item.cycleImplantation}`, color: LX.muted }] : []),
+        ];
+        const chipH = 0.3;
+        const chipLeft = x + 0.3;
+        const chipMaxX = x + rW - 0.3;
+        let chipX = chipLeft;
+        let chipY = y + 0.92;
+        chips.forEach((chip) => {
+          const chipW = Math.min(0.075 * chip.label.length + 0.3, rW - 0.6);
+          if (chipX + chipW > chipMaxX) {
+            chipX = chipLeft;
+            chipY += chipH + 0.1;
+          }
+          slide.addShape(pptx.ShapeType.roundRect, {
+            x: chipX,
+            y: chipY,
+            w: chipW,
+            h: chipH,
+            fill: { color: LX.panel2 },
+            line: { color: chip.color, pt: 1 },
+            rectRadius: 0.5,
+          });
+          slide.addText(chip.label, {
+            x: chipX,
+            y: chipY,
+            w: chipW,
+            h: chipH,
+            align: "center",
+            valign: "middle",
+            fontFace: BODY_FONT,
+            fontSize: 8.5,
+            color: chip.color,
+          });
+          chipX += chipW + 0.1;
         });
+
+        let cursorY = chipY + chipH + 0.18;
         if (item.subtitle) {
           slide.addText(item.subtitle, {
             x: x + 0.3,
-            y: y + 1.28,
+            y: cursorY,
             w: rW - 0.6,
             h: 0.5,
             fontFace: BODY_FONT,
@@ -1431,28 +1477,18 @@ export async function exportDashboardPptx({
             italic: true,
             color: LX.muted,
           });
+          cursorY += 0.55;
         }
         if (item.impact) {
           slide.addText(`Impacto: ${item.impact}`, {
             x: x + 0.3,
-            y: y + 1.85,
+            y: cursorY,
             w: rW - 0.6,
-            h: 1.2,
+            h: Math.max(y + rH - 0.3 - cursorY, 0.5),
             fontFace: BODY_FONT,
             fontSize: 10.5,
             color: LX.body,
             valign: "top",
-          });
-        }
-        if (item.cycleImplantation) {
-          slide.addText(`Ciclo: ${item.cycleImplantation}`, {
-            x: x + 0.3,
-            y: y + 3.1,
-            w: rW - 0.6,
-            h: 0.3,
-            fontFace: BODY_FONT,
-            fontSize: 9.5,
-            color: LX.dim,
           });
         }
       });
@@ -1463,9 +1499,9 @@ export async function exportDashboardPptx({
 
   // ---------- ENCERRAMENTO ----------
   const closing = newSlide();
-  closing.addText("OBRIGADO", {
+  closing.addText(`RELATÓRIO SEMANAL · ${formatPeriodPpt(startDate, endDate)}`, {
     x: 0,
-    y: 2.9,
+    y: 2.75,
     w: SLIDE_W,
     h: 0.4,
     align: "center",
@@ -1473,41 +1509,45 @@ export async function exportDashboardPptx({
     fontSize: 12,
     bold: true,
     color: LX.gold,
-    charSpacing: 7,
+    charSpacing: 5,
+  });
+  closing.addText("Obrigado", {
+    x: 0,
+    y: 3.2,
+    w: SLIDE_W,
+    h: 1.1,
+    align: "center",
+    fontFace: TITLE_FONT,
+    fontSize: 48,
+    color: LX.ink,
   });
   closing.addText("Perguntas e próximos passos", {
     x: 0,
-    y: 3.35,
+    y: 4.35,
     w: SLIDE_W,
-    h: 0.9,
-    align: "center",
-    fontFace: TITLE_FONT,
-    fontSize: 36,
-    color: LX.ink,
-  });
-  closing.addText(`Período analisado: ${formatPeriodPpt(startDate, endDate)}`, {
-    x: 0,
-    y: 4.3,
-    w: SLIDE_W,
-    h: 0.4,
+    h: 0.45,
     align: "center",
     fontFace: BODY_FONT,
-    fontSize: 13,
+    fontSize: 15,
     color: LX.muted,
   });
-  closing.addText("</>  Christian Silveira", {
-    x: 0,
-    y: 6.5,
-    w: SLIDE_W,
-    h: 0.3,
-    align: "center",
-    fontFace: BODY_FONT,
-    fontSize: 11,
-    color: LX.dim,
-  });
+  closing.addText(
+    [
+      { text: "</>  Christian Silveira", options: { color: LX.goldL } },
+      { text: "     ·     ", options: { color: LX.dim } },
+      { text: "Conectando código, café e criatividade", options: { color: LX.muted } },
+    ],
+    {
+      x: 0,
+      y: 5.0,
+      w: SLIDE_W,
+      h: 0.35,
+      align: "center",
+      fontFace: BODY_FONT,
+      fontSize: 12,
+    }
+  );
   footer(closing);
 
-  await pptx.writeFile({
-    fileName: `performance-dashboard-${startDate || "inicio"}-${endDate || "fim"}.pptx`,
-  });
+  await pptx.writeFile({ fileName: buildExportFileName(startDate, endDate, "pptx") });
 }
