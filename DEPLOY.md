@@ -61,7 +61,10 @@ Para simular o ambiente do Vercel (frontend + function juntos) você pode usar
    - A conta nova do Vercel precisa ter acesso a esse repositório no GitHub.
      Se o repo está em outra conta/organização, instale o app do Vercel nela
      ou transfira/compartilhe o acesso.
-3. Em **Root Directory** deixe a **raiz** do repositório (não aponte para `frontend`).
+3. Em **Root Directory** deixe **VAZIO / `./`** (a **raiz** do repositório).
+   ⚠️ **Não** selecione a pasta `frontend` aqui — se apontar para `frontend`,
+   o build quebra (`frontend/frontend/package.json`, erro ENOENT) e a pasta
+   `api/` nem é publicada. Veja Troubleshooting abaixo.
    O [`vercel.json`](vercel.json) já cuida do build:
    - build: `npm --prefix frontend install && npm --prefix frontend run build`
    - saída estática: `frontend/dist`
@@ -93,6 +96,24 @@ Para simular o ambiente do Vercel (frontend + function juntos) você pode usar
 - [ ] Conferir em **Table Editor → weekly_reports** que a linha da semana foi criada.
 
 ---
+
+## Troubleshooting
+
+**`npm error enoent ... /vercel/path0/frontend/frontend/package.json` (exit 254)**
+O **Root Directory** do projeto no Vercel está apontando para `frontend`, e o
+`buildCommand` acrescenta outro `frontend` por cima. Correção:
+Vercel → **Settings → Build and Deployment → Root Directory** → deixe **vazio/`./`**
+→ salve → **Redeploy**. (Com root = `frontend` a pasta `api/` também não seria
+publicada, então esse ajuste é obrigatório.)
+
+**Chamados mostram `Unexpected token 'T', "The page c"... is not valid JSON`**
+A rota `/api/tickets/summary` caiu no 404 do Vercel (HTML) em vez da function.
+Garanta que o deploy inclui `api/index.js` e o rewrite do [`vercel.json`](vercel.json)
+(`/api/(.*)` → `/api`). Teste `/api/health` — se responder JSON, o roteamento está ok.
+
+**Chamados mostram `Nao foi possivel consultar a API do SULTS`**
+Isso já é JSON (não é mais erro de rota): falta/está inválida a env `SULTS_API_TOKEN`
+no Vercel. Defina-a em Settings → Environment Variables e faça Redeploy.
 
 ## Notas
 
