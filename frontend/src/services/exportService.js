@@ -121,8 +121,8 @@ function buildDynamicPptNarrative(rows, operationalTotal, repactTotal, sectionKp
       title: "Riscos monitorados",
       text:
         repactTotal > 0
-          ? `Repactuação identificada em ${repactTotal} chamados, exigindo acompanhamento preventivo de SLA.`
-          : "Sem repactuação no período, manter observabilidade para preservar tendência.",
+          ? `Prazos renegociados em ${repactTotal} chamados, exigindo acompanhamento preventivo de SLA.`
+          : "Sem prazos renegociados no período, manter observabilidade para preservar tendência.",
     },
     {
       title: "Ganhos esperados",
@@ -483,7 +483,7 @@ export async function exportDashboardPdf({
     { title: "Capa", detail: "Contexto e período analisado" },
     { title: "Sumário executivo", detail: "Estrutura e distribuição das seções" },
     { title: "Métricas estratégicas", detail: "KPI consolidado, operacionais e atividades" },
-    { title: "Painel de status (SULTS)", detail: "Distribuição de volume e repactuação por status" },
+    { title: "Painel de status (SULTS)", detail: "Distribuição de volume e prazos renegociados por status" },
     { title: "Atividades por seção", detail: "Detalhamento por tema" },
   ];
 
@@ -547,7 +547,7 @@ export async function exportDashboardPdf({
       valueColor: PPT_THEME.sapBlue,
     },
     {
-      labelLine1: "Chamados com repactuação",
+      labelLine1: "Prazos renegociados",
       labelLine2: "Impacto de prazo",
       value: repactTotal,
       fill: "FFF2E7",
@@ -596,7 +596,7 @@ export async function exportDashboardPdf({
   }
 
   // CAPITULO: STATUS
-  startChapter("Painel de status (SULTS)", "Volume principal e repactuação por status");
+  startChapter("Painel de status (SULTS)", "Volume principal e prazos renegociados por status");
 
   rows.forEach((row) => {
     ensureSpace(28);
@@ -610,10 +610,7 @@ export async function exportDashboardPdf({
     doc.text(safeText(row.status) || "Status", margin + 10, y + 16);
 
     doc.setFont("helvetica", "bold");
-    doc.text(`Volume: ${row.primary}`, margin + maxWidth - 180, y + 16);
-    doc.setFont("helvetica", "normal");
-    setTextFromHex(doc, PPT_THEME.textMuted);
-    doc.text(`Repactuação: ${row.combined}`, margin + maxWidth - 88, y + 16);
+    doc.text(`Volume: ${row.primary}`, margin + maxWidth - 120, y + 16);
 
     y += 30;
   });
@@ -800,7 +797,7 @@ export async function exportDashboardPdf({
     doc.setFontSize(9);
     setTextFromHex(doc, "4F5F6D");
     doc.text(
-      `${safeText(row.status)} | Volume: ${row.primary} | Repactuação: ${row.combined}`,
+      `${safeText(row.status)} | Volume: ${row.primary}`,
       margin,
       y + 12
     );
@@ -1041,7 +1038,7 @@ export async function exportDashboardPptx({
       valueColor: PPT_THEME.sapBlue,
     },
     {
-      label: "Total de Chamados com Repactuação de Prazos",
+      label: "Prazos Renegociados",
       sectionName: "",
       isManual: false,
       value: repactTotal,
@@ -1192,7 +1189,7 @@ export async function exportDashboardPptx({
     line: { color: "D6E1EA", pt: 1 },
   });
 
-  statusSlide.addText("Volume x Repactuação", {
+  statusSlide.addText("Volume x Prazos Renegociados", {
     x: 8.35,
     y: 1.25,
     w: 3.3,
@@ -1209,7 +1206,7 @@ export async function exportDashboardPptx({
     [
       {
         name: "Distribuicao",
-        labels: ["Volume Operacional", "Repactuação"],
+        labels: ["Volume Operacional", "Prazos Renegociados"],
         values: donutSum > 0 ? donutValues : [1, 0],
       },
     ],
@@ -1245,7 +1242,7 @@ export async function exportDashboardPptx({
     color: PPT_THEME.textMuted,
     align: "center",
   });
-  statusSlide.addText(`Volume Operacional: ${operationalTotal}\nRepactuação: ${repactTotal}`, {
+  statusSlide.addText(`Volume Operacional: ${operationalTotal}\nPrazos Renegociados: ${repactTotal}`, {
     x: 8.45,
     y: 5.0,
     w: 3.1,

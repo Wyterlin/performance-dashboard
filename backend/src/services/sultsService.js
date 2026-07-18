@@ -13,21 +13,11 @@ const STATUS_BY_CODE = {
   6: "Aguardando Responsável",
 };
 
-// Colunas "abertas": contadas AO VIVO (todos que estão nesse status agora),
-// sem filtro de data — assim batem com as 4 primeiras colunas do board.
+// Colunas "abertas": contadas AO VIVO (status atual), sem filtro de data.
 const OPEN_STATUS_CODES = [1, 4, 5, 6];
 
-// Colunas "fechadas": contadas apenas dentro do período, usando a data
-// específica de cada evento (resolvido / concluído).
-const CLOSED_STATUSES = [
-  { code: 3, dateField: "resolvido" }, // Resolvido
-  { code: 2, dateField: "concluido" }, // Concluído
-];
-
 function normalizeStatusToCode(statusValue) {
-  if (typeof statusValue === "number" && Number.isFinite(statusValue)) {
-    return statusValue;
-  }
+  if (typeof statusValue === "number" && Number.isFinite(statusValue)) return statusValue;
   const status = String(statusValue || "").trim().toLowerCase();
   if (!status) return null;
   if (status.includes("novo") || status.includes("aberto") || status.includes("open")) return 1;
@@ -45,9 +35,7 @@ function statusCodeOf(ticket) {
 
 function buildBaseStatusCount() {
   const base = {};
-  for (const code of OFFICIAL_STATUS_ORDER) {
-    base[STATUS_BY_CODE[code]] = 0;
-  }
+  for (const code of OFFICIAL_STATUS_ORDER) base[STATUS_BY_CODE[code]] = 0;
   return base;
 }
 
@@ -58,13 +46,16 @@ function filterByResponsibleUser(tickets, userId) {
 
 function toUtcIsoBoundary(dateText, isEnd) {
   if (!dateText) return "";
-  const suffix = isEnd ? "T23:59:59Z" : "T00:00:00Z";
-  return `${dateText}${suffix}`;
+  return `${dateText}${isEnd ? "T23:59:59Z" : "T00:00:00Z"}`;
+}
+
+function ms(dateStr) {
+  if (!dateStr) return NaN;
+  return new Date(dateStr).getTime();
 }
 
 function withinRange(dateStr, startMs, endMs) {
-  if (!dateStr) return false;
-  const t = new Date(dateStr).getTime();
+  const t = ms(dateStr);
   if (Number.isNaN(t)) return false;
   if (startMs != null && t < startMs) return false;
   if (endMs != null && t > endMs) return false;
@@ -111,7 +102,6 @@ function dedupeTicketsById(tickets) {
   return [...map.values()];
 }
 
-/** Busca paginada genérica com um conjunto de filtros (params). */
 async function fetchAllTickets(baseUrl, path, headers, timeout, params) {
   const { pageLimit, maxPages } = resolvePaginationConfig();
   const collected = [];
@@ -124,7 +114,6 @@ async function fetchAllTickets(baseUrl, path, headers, timeout, params) {
       params: { ...params, start, limit: pageLimit },
       timeout,
     });
-
     const parsed = extractTicketPayload(response.data);
     collected.push(...parsed.tickets);
 
@@ -135,19 +124,30 @@ async function fetchAllTickets(baseUrl, path, headers, timeout, params) {
     start = parsed.start + parsed.limit;
     page += 1;
   }
-
   return dedupeTicketsById(collected);
 }
 
-/** Repactuação de prazos: data de resolução estipulada difere da planejada. */
-function isRepactuated(ticket) {
-  const planned = ticket?.resolverPlanejado;
-  const stipulated = ticket?.resolverEstipulado;
-  if (!planned || !stipulated) return false;
-  const a = new Date(planned).getTime();
-  const b = new Date(stipulated).getTime();
+/** Prazo renegociado: resolução estipulada difere da planejada. */
+function isRenegotiated(ticket) {
+  const a = ms(ticket?.resolverPlanejado);
+  const b = ms(ticket?.resolverEstipulado);
   if (Number.isNaN(a) || Number.isNaN(b)) return false;
   return a !== b;
+}
+
+/** Média de duração (fim - início) em ms, ignorando pares inválidos/negativos. */
+function averageDurationMs(tickets, startField, endField) {
+  const diffs = [];
+  for (const t of tickets) {
+    const s = ms(t[startField]);
+    const e = ms(t[endField]);
+    if (Number.isNaN(s) || Number.isNaN(e)) continue;
+    if (e < s) continue;
+    diffs.push(e - s);
+  }
+  if (!diffs.length) return { avgMs: null, count: 0 };
+  const avg = diffs.reduce((acc, v) => acc + v, 0) / diffs.length;
+  return { avgMs: Math.round(avg), count: diffs.length };
 }
 
 async function fetchTicketSummary(options = {}) {
@@ -158,11 +158,9 @@ async function fetchTicketSummary(options = {}) {
   const hasRange = Boolean(startDate || endDate);
 
   const userKey = requestedUserId ? `user:${requestedUserId}` : "user:all";
-  const rangeKey = `range:${startDate || "all"}:${endDate || "all"}`;
-  const cacheKey = `v2|${userKey}|${rangeKey}`;
+  const cacheKey = `v3|${userKey}|range:${startDate || "all"}:${endDate || "all"}`;
   const ttl = Number(process.env.TICKET_CACHE_TTL_MS || 600000);
   const cachedEntry = cacheByKey.get(cacheKey);
-
   if (!forceRefresh && cachedEntry?.data && Date.now() < cachedEntry.expiresAt) {
     return { ...cachedEntry.data, source: "cache" };
   }
@@ -175,83 +173,113 @@ async function fetchTicketSummary(options = {}) {
   const timeout = Number(process.env.SULTS_TIMEOUT_MS || 10000);
 
   const headers = { Accept: "application/json" };
-  if (token) {
-    headers[authHeader] = authScheme ? `${authScheme} ${token}`.trim() : token;
-  }
+  if (token) headers[authHeader] = authScheme ? `${authScheme} ${token}`.trim() : token;
 
   const baseParams = {};
   if (requestedUserId) baseParams.responsavel = String(requestedUserId);
 
-  const startMs = startDate ? new Date(toUtcIsoBoundary(startDate, false)).getTime() : null;
-  const endMs = endDate ? new Date(toUtcIsoBoundary(endDate, true)).getTime() : null;
+  const startMs = startDate ? ms(toUtcIsoBoundary(startDate, false)) : null;
+  const endMs = endDate ? ms(toUtcIsoBoundary(endDate, true)) : null;
 
   const statusCount = buildBaseStatusCount();
-  const allFetched = [];
 
-  // --- Colunas abertas: ao vivo (sem filtro de data) ---
+  // Busca por um campo de data, confirmando o intervalo no cliente.
+  const fetchByDateField = async (field, extraParams = {}) => {
+    if (!hasRange) return [];
+    const params = { ...baseParams, ...extraParams };
+    const startIso = toUtcIsoBoundary(startDate, false);
+    const endIso = toUtcIsoBoundary(endDate, true);
+    if (startIso) params[`${field}Start`] = startIso;
+    if (endIso) params[`${field}End`] = endIso;
+    const tickets = await fetchAllTickets(baseUrl, path, headers, timeout, params);
+    return filterByResponsibleUser(
+      tickets.filter((t) => withinRange(t[field], startMs, endMs)),
+      requestedUserId
+    );
+  };
+
+  // --- Colunas abertas: ao vivo, por situacao ---
   for (const code of OPEN_STATUS_CODES) {
     const tickets = await fetchAllTickets(baseUrl, path, headers, timeout, {
       ...baseParams,
       situacao: code,
     });
-    // Confirma o status no cliente (caso a API ignore o filtro situacao).
     const filtered = filterByResponsibleUser(
       tickets.filter((t) => statusCodeOf(t) === code),
       requestedUserId
     );
     statusCount[STATUS_BY_CODE[code]] = filtered.length;
-    allFetched.push(...filtered);
   }
 
-  // --- Colunas fechadas: apenas dentro do período (por resolvido/concluido) ---
-  for (const { code, dateField } of CLOSED_STATUSES) {
-    const dateParams = {};
-    if (hasRange) {
-      const startIso = toUtcIsoBoundary(startDate, false);
-      const endIso = toUtcIsoBoundary(endDate, true);
-      if (startIso) dateParams[`${dateField}Start`] = startIso;
-      if (endIso) dateParams[`${dateField}End`] = endIso;
-    }
-    const tickets = await fetchAllTickets(baseUrl, path, headers, timeout, {
-      ...baseParams,
-      situacao: code,
-      ...dateParams,
-    });
-    const filtered = filterByResponsibleUser(
-      tickets.filter(
-        (t) => statusCodeOf(t) === code && (!hasRange || withinRange(t[dateField], startMs, endMs))
-      ),
-      requestedUserId
-    );
-    statusCount[STATUS_BY_CODE[code]] = filtered.length;
-    allFetched.push(...filtered);
-  }
+  // --- Conjuntos do período (uma busca por evento) ---
+  const resolvedSet = await fetchByDateField("resolvido"); // resolvidos no período
+  const concludedSet = await fetchByDateField("concluido"); // concluídos no período
+  const respondedSet = await fetchByDateField("primeiraInteracao"); // 1ª resposta no período
+  const openedSet = await fetchByDateField("aberto"); // abertos no período
+
+  // Colunas fechadas: status atual + evento no período.
+  statusCount[STATUS_BY_CODE[3]] = resolvedSet.filter((t) => statusCodeOf(t) === 3).length;
+  statusCount[STATUS_BY_CODE[2]] = concludedSet.filter((t) => statusCodeOf(t) === 2).length;
 
   const total = OFFICIAL_STATUS_ORDER.reduce(
     (acc, code) => acc + (statusCount[STATUS_BY_CODE[code]] || 0),
     0
   );
 
-  const repactuados = dedupeTicketsById(allFetched).filter(isRepactuated).length;
+  // --- Métricas de atendimento ---
+  const firstResponse = averageDurationMs(respondedSet, "aberto", "primeiraInteracao");
+  const resolution = averageDurationMs(resolvedSet, "aberto", "resolvido");
+
+  // Cumprimento de SLA: resolvido dentro do prazo estipulado.
+  const slaEval = resolvedSet.filter((t) => !Number.isNaN(ms(t.resolverEstipulado)) && !Number.isNaN(ms(t.resolvido)));
+  const slaWithin = slaEval.filter((t) => ms(t.resolvido) <= ms(t.resolverEstipulado)).length;
+  const slaPct = slaEval.length ? Math.round((slaWithin / slaEval.length) * 100) : null;
+
+  // CSAT: média das avaliações dos concluídos no período.
+  const rated = concludedSet.filter((t) => Number(t.avaliacaoNota) > 0);
+  const csatAvg = rated.length
+    ? Math.round((rated.reduce((acc, t) => acc + Number(t.avaliacaoNota), 0) / rated.length) * 10) / 10
+    : null;
+
+  // Taxa de resolução (vazão): fechados no período ÷ abertos no período.
+  const closedUnique = dedupeTicketsById([...resolvedSet, ...concludedSet]).length;
+  const openedCount = openedSet.length;
+  const resolutionRatePct = openedCount ? Math.round((closedUnique / openedCount) * 100) : null;
+
+  // Prazos renegociados entre os chamados trabalhados no período.
+  const workedInPeriod = dedupeTicketsById([...resolvedSet, ...concludedSet, ...respondedSet, ...openedSet]);
+  const renegotiated = workedInPeriod.filter(isRenegotiated).length;
 
   const summary = {
     total,
-    // Mantém a "interface" antiga: repactTotal = totalCombined - total.
-    totalCombined: total + repactuados,
-    repactuados,
+    // Mantém compatibilidade: repactTotal = totalCombined - total.
+    totalCombined: total + renegotiated,
+    renegotiated,
     userId: requestedUserId || null,
     startDate: startDate || null,
     endDate: endDate || null,
     statusCount,
-    // Sem número secundário separado: o chip espelha a coluna.
     statusCountCombined: statusCount,
     statusOrder: OFFICIAL_STATUS_ORDER.map((code) => STATUS_BY_CODE[code]),
+    metrics: {
+      firstResponseMs: firstResponse.avgMs,
+      firstResponseCount: firstResponse.count,
+      resolutionMs: resolution.avgMs,
+      resolutionCount: resolution.count,
+      slaPct,
+      slaWithin,
+      slaTotal: slaEval.length,
+      csatAvg,
+      csatCount: rated.length,
+      openedInPeriod: openedCount,
+      closedInPeriod: closedUnique,
+      resolutionRatePct,
+    },
     fetchedAt: new Date().toISOString(),
     source: "live",
   };
 
   cacheByKey.set(cacheKey, { data: summary, expiresAt: Date.now() + ttl });
-
   return summary;
 }
 

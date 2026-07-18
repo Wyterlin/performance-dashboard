@@ -13,6 +13,19 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+function formatDuration(milliseconds) {
+  if (milliseconds == null || Number.isNaN(Number(milliseconds))) return "—";
+  const totalMinutes = Math.round(Number(milliseconds) / 60000);
+  if (totalMinutes < 1) return "menos de 1m";
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const totalHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (totalHours < 24) return minutes ? `${totalHours}h ${minutes}m` : `${totalHours}h`;
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours ? `${days}d ${hours}h` : `${days}d`;
+}
+
 function getInitialSidebarHidden() {
   try {
     const stored = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
@@ -72,8 +85,12 @@ export default function App() {
     .filter((section) => section.total > 0);
   const manualKpisTotal = sectionKpis.reduce((acc, kpi) => acc + kpi.total, 0);
   const operationalTotal = Number(ticketSummary?.total || 0);
-  const repactTotal = Math.max(Number(ticketSummary?.totalCombined || 0) - operationalTotal, 0);
+  const renegotiatedTotal = Math.max(
+    Number(ticketSummary?.renegotiated ?? Number(ticketSummary?.totalCombined || 0) - operationalTotal),
+    0
+  );
   const highlightedKpiTotal = Math.max(operationalTotal + manualKpisTotal, 0);
+  const ticketMetrics = ticketSummary?.metrics || {};
   const sectionsWithIndex = sections.map((section, index) => ({ section, index }));
   const roadmapEntry = sectionsWithIndex.find(({ section }) => normalizeText(section.name).includes("roadmap"));
   const nonRoadmapEntries = sectionsWithIndex.filter(
@@ -358,8 +375,8 @@ export default function App() {
             </article>
 
             <article className="kpi-item">
-              <span>Repactuação de Prazos</span>
-              <strong>{repactTotal}</strong>
+              <span>Prazos Renegociados</span>
+              <strong>{renegotiatedTotal}</strong>
               <i className="kpi-accent kpi-accent-gold" aria-hidden="true" />
             </article>
 
@@ -388,6 +405,42 @@ export default function App() {
               error={ticketError}
               onRefresh={loadPeriodData}
             />
+          </section>
+
+          <section className="metrics-strip" aria-label="Indicadores de atendimento">
+            <article className="metric-card">
+              <span>Tempo de 1ª Resposta</span>
+              <strong>{formatDuration(ticketMetrics.firstResponseMs)}</strong>
+              <span className="metric-sub">média · {Number(ticketMetrics.firstResponseCount || 0)} chamados</span>
+            </article>
+
+            <article className="metric-card">
+              <span>Tempo de Resolução</span>
+              <strong>{formatDuration(ticketMetrics.resolutionMs)}</strong>
+              <span className="metric-sub">média · {Number(ticketMetrics.resolutionCount || 0)} resolvidos</span>
+            </article>
+
+            <article className="metric-card">
+              <span>Cumprimento de SLA</span>
+              <strong>{ticketMetrics.slaPct == null ? "—" : `${ticketMetrics.slaPct}%`}</strong>
+              <span className="metric-sub">
+                {Number(ticketMetrics.slaWithin || 0)}/{Number(ticketMetrics.slaTotal || 0)} no prazo
+              </span>
+            </article>
+
+            <article className="metric-card">
+              <span>Satisfação (CSAT)</span>
+              <strong>{ticketMetrics.csatAvg == null ? "—" : `${Number(ticketMetrics.csatAvg).toFixed(1)}/5`}</strong>
+              <span className="metric-sub">{Number(ticketMetrics.csatCount || 0)} avaliações</span>
+            </article>
+
+            <article className="metric-card">
+              <span>Taxa de Resolução</span>
+              <strong>{ticketMetrics.resolutionRatePct == null ? "—" : `${ticketMetrics.resolutionRatePct}%`}</strong>
+              <span className="metric-sub">
+                {Number(ticketMetrics.closedInPeriod || 0)} fechados · {Number(ticketMetrics.openedInPeriod || 0)} abertos
+              </span>
+            </article>
           </section>
 
           <section id="sec-activities" className="search-filter-section">

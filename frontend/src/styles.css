@@ -610,6 +610,43 @@ h3 {
   flex: none;
 }
 
+/* ---------- ATENDIMENTO (SLA) ---------- */
+.metrics-strip {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.metric-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: grid;
+  gap: 0.3rem;
+  align-content: start;
+}
+
+.metric-card > span:first-child {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.metric-card strong {
+  color: var(--ink);
+  font-family: "Playfair Display", serif;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.1;
+  margin-top: 4px;
+}
+
+.metric-sub {
+  color: var(--dim);
+  font-size: 11px;
+}
+
 /* ---------- TICKETS ---------- */
 .grid-layout {
   margin-top: 22px;
