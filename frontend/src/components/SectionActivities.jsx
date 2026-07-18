@@ -12,6 +12,27 @@ const CYCLE_TIME_MAX = 40;
 const ROADMAP_IMPACT_MAX = 180;
 const CALLED_MIN = 4;
 const CALLED_MAX = 20;
+const BEFORE_AFTER_MAX = 40;
+const HIGHLIGHT_NOTE_MAX = 160;
+
+const EMPTY_DRAFT = {
+  title: "",
+  activity: "",
+  highlight: "",
+  called: "",
+  projectTeamInput: "",
+  cycleImplantation: "",
+  cycleTime: "",
+  subtitle: "",
+  impact: "",
+  difficulty: "medium",
+  category: "Processos",
+  isWeekHighlight: false,
+  beforeValue: "",
+  afterValue: "",
+  highlightNote: "",
+  position: 1,
+};
 const ENABLE_EXTRA_SHORTCUTS = true;
 
 function normalizeText(value) {
@@ -39,20 +60,7 @@ export default function SectionActivities({
   const sectionRef = useRef(null);
   const deleteBackdropDownRef = useRef(false);
   const [showComposer, setShowComposer] = useState(false);
-  const [draft, setDraft] = useState({
-    title: "",
-    activity: "",
-    highlight: "",
-    called: "",
-    projectTeamInput: "",
-    cycleImplantation: "",
-    cycleTime: "",
-    subtitle: "",
-    impact: "",
-    difficulty: "medium",
-    category: "Processos",
-    position: 1,
-  });
+  const [draft, setDraft] = useState({ ...EMPTY_DRAFT, position: 1 });
   const [editingActivityId, setEditingActivityId] = useState(null);
   const [deletingActivity, setDeletingActivity] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -160,20 +168,7 @@ export default function SectionActivities({
         };
     const added = onUpsert(sectionIndex, payload, editingActivityId);
     if (added) {
-      setDraft({
-        title: "",
-        activity: "",
-        highlight: "",
-        called: "",
-        projectTeamInput: "",
-        cycleImplantation: "",
-        cycleTime: "",
-        subtitle: "",
-        impact: "",
-        difficulty: "medium",
-        category: "Processos",
-        position: 1,
-      });
+      setDraft({ ...EMPTY_DRAFT, position: 1 });
       setEditingActivityId(null);
       setShowComposer(false);
       setActiveMenuId(null);
@@ -184,20 +179,7 @@ export default function SectionActivities({
     const nextPosition =
       (section.activities || []).reduce((acc, item) => Math.max(acc, Number(item.position || 0)), 0) + 1;
     setEditingActivityId(null);
-    setDraft({
-      title: "",
-      activity: "",
-      highlight: "",
-      called: "",
-      projectTeamInput: "",
-      cycleImplantation: "",
-      cycleTime: "",
-      subtitle: "",
-      impact: "",
-      difficulty: "medium",
-      category: "Processos",
-      position: nextPosition,
-    });
+    setDraft({ ...EMPTY_DRAFT, position: nextPosition });
     setShowComposer(true);
   }
 
@@ -216,26 +198,17 @@ export default function SectionActivities({
       impact: String(item.impact || item.benefit || item.activity || ""),
       difficulty: String(item.difficulty || "medium"),
       category: String(item.category || "Processos"),
+      isWeekHighlight: Boolean(item.isWeekHighlight),
+      beforeValue: String(item.beforeValue || ""),
+      afterValue: String(item.afterValue || ""),
+      highlightNote: String(item.highlightNote || ""),
       position: Number(item.position || 1),
     });
     setShowComposer(true);
   }
 
   function handleCancel() {
-    setDraft({
-      title: "",
-      activity: "",
-      highlight: "",
-      called: "",
-      projectTeamInput: "",
-      cycleImplantation: "",
-      cycleTime: "",
-      subtitle: "",
-      impact: "",
-      difficulty: "medium",
-      category: "Processos",
-      position: 1,
-    });
+    setDraft({ ...EMPTY_DRAFT, position: 1 });
     setEditingActivityId(null);
     setShowComposer(false);
   }
@@ -635,6 +608,62 @@ export default function SectionActivities({
                       />
                       <small>{draft.highlight.length}/{HIGHLIGHT_MAX}</small>
                     </label>
+                  ) : null}
+
+                  {!isRoadmapSection ? (
+                    <div className="week-highlight-block">
+                      <label className="week-highlight-toggle">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(draft.isWeekHighlight)}
+                          onChange={(event) =>
+                            setDraft((prev) => ({ ...prev, isWeekHighlight: event.target.checked }))
+                          }
+                        />
+                        <span>Destaque da Semana (gera um slide próprio de ganho)</span>
+                      </label>
+
+                      {draft.isWeekHighlight ? (
+                        <>
+                          <div className="roadmap-input-grid">
+                            <label>
+                              Antes
+                              <input
+                                value={draft.beforeValue}
+                                maxLength={BEFORE_AFTER_MAX}
+                                onChange={(event) =>
+                                  updateDraft("beforeValue", event.target.value, BEFORE_AFTER_MAX)
+                                }
+                                placeholder="Ex.: 50s"
+                              />
+                            </label>
+                            <label>
+                              Depois
+                              <input
+                                value={draft.afterValue}
+                                maxLength={BEFORE_AFTER_MAX}
+                                onChange={(event) =>
+                                  updateDraft("afterValue", event.target.value, BEFORE_AFTER_MAX)
+                                }
+                                placeholder="Ex.: 1s60ms"
+                              />
+                            </label>
+                          </div>
+                          <label>
+                            Observação do ganho (opcional)
+                            <input
+                              value={draft.highlightNote}
+                              maxLength={HIGHLIGHT_NOTE_MAX}
+                              onChange={(event) =>
+                                updateDraft("highlightNote", event.target.value, HIGHLIGHT_NOTE_MAX)
+                              }
+                              placeholder="Ex.: tempo de alteração da Transaction"
+                            />
+                            <small>{(draft.highlightNote || "").length}/{HIGHLIGHT_NOTE_MAX}</small>
+                          </label>
+                        </>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
 

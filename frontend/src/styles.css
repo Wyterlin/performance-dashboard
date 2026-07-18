@@ -1390,6 +1390,39 @@ label small {
   color: var(--goldL);
 }
 
+/* ---------- DESTAQUE DA SEMANA ---------- */
+.week-highlight-block {
+  display: grid;
+  gap: 0.6rem;
+  padding: 12px;
+  border: 1px solid var(--goldln);
+  border-radius: 10px;
+  background: var(--goldbg);
+}
+
+.week-highlight-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--goldL);
+  font-size: 12px;
+}
+
+.week-highlight-toggle input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
 /* ---------- GERENCIAR SEÇÕES ---------- */
 .manage-sections {
   width: min(600px, 94vw);

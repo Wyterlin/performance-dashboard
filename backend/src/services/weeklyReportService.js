@@ -173,6 +173,11 @@ function normalizeSections(payload) {
         cycleImplantation: sanitizeCycleImplantation(activity.cycleImplantation),
         cycleTime: sanitizeCycleTime(activity.cycleTime),
         benefit: sanitizeBenefit(activity.benefit || activity.activity),
+        // Destaque da semana: comparativo antes -> depois (vira slide próprio).
+        isWeekHighlight: Boolean(activity.isWeekHighlight),
+        beforeValue: String(activity.beforeValue || "").trim().slice(0, 40),
+        afterValue: String(activity.afterValue || "").trim().slice(0, 40),
+        highlightNote: String(activity.highlightNote || "").trim().slice(0, 160),
         difficulty: isRoadmapSectionName(section.name)
           ? sanitizeDifficulty(activity.difficulty) || "medium"
           : sanitizeDifficulty(activity.difficulty),

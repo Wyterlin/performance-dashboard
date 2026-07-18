@@ -441,11 +441,11 @@ export async function exportDashboardPdf({
     doc.text(syncText, PADX, H - 22);
   }
 
-  function panel(x, y, w, h, { fill = LX.panel, border = LX.line } = {}) {
+  function panel(x, y, w, h, { fill = LX.panel, border = LX.line, radius = 12 } = {}) {
     setFillFromHex(doc, fill);
     setDrawFromHex(doc, border);
-    doc.setLineWidth(0.8);
-    doc.roundedRect(x, y, w, h, 8, 8, "FD");
+    doc.setLineWidth(0.6);
+    doc.roundedRect(x, y, w, h, radius, radius, "FD");
   }
 
   function header({ eyebrow, title, number }) {
@@ -531,7 +531,7 @@ export async function exportDashboardPdf({
   const kY = 118;
   const kH = 132;
 
-  panel(PADX, kY, wide, kH, { fill: LX.deep, border: LX.gold });
+  panel(PADX, kY, wide, kH, { fill: LX.deep, border: LX.goldSoft });
   setTextFromHex(doc, "C9D2FF");
   doc.setFont(SANS, "normal");
   doc.setFontSize(8);
@@ -578,14 +578,17 @@ export async function exportDashboardPdf({
     const x = PADX + col * (sW + sGap);
     const y = 120 + line * (sH + sGap);
     const isGold = normalizeText(row.status).includes("conclu");
-    panel(x, y, sW, sH, { border: isGold ? LX.gold : LX.blue });
+    panel(x, y, sW, sH, {
+      fill: isGold ? LX.goldTint : LX.blueTint,
+      border: isGold ? LX.goldSoft : LX.blueSoft,
+    });
     setTextFromHex(doc, isGold ? LX.goldL : LX.muted);
     doc.setFont(SANS, "normal");
     doc.setFontSize(10);
     doc.text(safeText(row.status), x + 16, y + sH / 2 + 4);
     setTextFromHex(doc, isGold ? LX.goldL : LX.ink);
     doc.setFont(SANS, "bold");
-    doc.setFontSize(24);
+    doc.setFontSize(26);
     doc.text(String(row.primary), x + sW - 16, y + sH / 2 + 8, { align: "right" });
   });
   setTextFromHex(doc, LX.muted);
@@ -657,6 +660,67 @@ export async function exportDashboardPdf({
     });
     footer();
   }
+
+  // ---------- DESTAQUE DA SEMANA ----------
+  collectWeekHighlights(sections).forEach((item) => {
+    newPage();
+    setTextFromHex(doc, LX.gold);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(10);
+    doc.text(`DESTAQUE DA SEMANA · ${safeText(item.title).toUpperCase()}`, W / 2, 120, {
+      align: "center",
+      charSpace: 3,
+    });
+    setTextFromHex(doc, LX.ink);
+    doc.setFont(SERIF, "bold");
+    doc.setFontSize(32);
+    doc.text("Ganho de Performance", W / 2, 164, { align: "center" });
+
+    let boxY = 210;
+    if (item.gainLabel) {
+      setTextFromHex(doc, LX.goldL);
+      doc.setFont(SERIF, "bold");
+      doc.setFontSize(58);
+      doc.text(item.gainLabel, W / 2, 250, { align: "center" });
+      boxY = 300;
+    }
+
+    const boxW = 150;
+    const arrowW = 50;
+    const boxX = (W - (boxW * 2 + arrowW)) / 2;
+    panel(boxX, boxY, boxW, 74);
+    setTextFromHex(doc, LX.muted);
+    doc.setFont(SANS, "normal");
+    doc.setFontSize(8.5);
+    doc.text("ANTES", boxX + boxW / 2, boxY + 24, { align: "center", charSpace: 1.5 });
+    setTextFromHex(doc, LX.body);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(18);
+    doc.text(safeText(item.before), boxX + boxW / 2, boxY + 54, { align: "center" });
+
+    setTextFromHex(doc, LX.gold);
+    doc.setFont(SANS, "normal");
+    doc.setFontSize(16);
+    doc.text("-->", boxX + boxW + arrowW / 2, boxY + 44, { align: "center" });
+
+    const afterX = boxX + boxW + arrowW;
+    panel(afterX, boxY, boxW, 74, { fill: LX.goldTint, border: LX.goldSoft });
+    setTextFromHex(doc, LX.goldL);
+    doc.setFont(SANS, "normal");
+    doc.setFontSize(8.5);
+    doc.text("DEPOIS", afterX + boxW / 2, boxY + 24, { align: "center", charSpace: 1.5 });
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(18);
+    doc.text(safeText(item.after), afterX + boxW / 2, boxY + 54, { align: "center" });
+
+    if (item.note) {
+      setTextFromHex(doc, LX.muted);
+      doc.setFont(SANS, "normal");
+      doc.setFontSize(10);
+      doc.text(safeText(item.note), W / 2, boxY + 108, { align: "center" });
+    }
+    footer();
+  });
 
   // ---------- 5..N. SEÇÕES ----------
   const populated = (sections || []).filter(
@@ -756,7 +820,7 @@ export async function exportDashboardPdf({
         const diffLabel =
           item.difficulty === "high" ? "Alta" : item.difficulty === "low" ? "Baixa" : "Média";
 
-        panel(x, y, rW, rH, { border: LX.gold });
+        panel(x, y, rW, rH, { border: LX.goldSoft });
         setTextFromHex(doc, LX.ink);
         doc.setFont(SANS, "bold");
         doc.setFontSize(12);
@@ -857,6 +921,12 @@ const LX = {
   dim: "6D7488",
   danger: "FF8D97",
   ok: "6FD898",
+  // Bordas/fundos "translúcidos" do deck achatados sobre o fundo escuro —
+  // PPT/PDF não têm alpha confiável, então usamos a cor já composta.
+  blueSoft: "1E3282", // rgba(43,79,216,.55) sobre o painel
+  goldSoft: "7A6729", // rgba(212,175,55,.55) sobre o painel
+  blueTint: "10141F", // leve tom azul no fundo do card
+  goldTint: "1A1710", // leve tom quente no fundo do card
 };
 
 const TITLE_FONT = "Playfair Display";
@@ -878,6 +948,58 @@ function formatDurationPpt(milliseconds) {
   const days = Math.floor(totalHours / 24);
   const hours = totalHours % 24;
   return hours ? `${days}d ${hours}h` : `${days}d`;
+}
+
+/**
+ * Converte textos de tempo ("50s", "1s60ms", "3h 20m") em milissegundos para
+ * calcular o ganho percentual. Retorna null quando não é um tempo reconhecível.
+ */
+function parseDurationText(value) {
+  const raw = String(value || "").toLowerCase().replace(/\s+/g, "");
+  if (!raw) return null;
+  const pattern = /(\d+(?:[.,]\d+)?)(ms|s|m|h|d)/g;
+  let total = 0;
+  let matched = false;
+  let match = pattern.exec(raw);
+  while (match) {
+    matched = true;
+    const amount = Number(String(match[1]).replace(",", "."));
+    const unit = match[2];
+    const factor =
+      unit === "ms" ? 1 : unit === "s" ? 1000 : unit === "m" ? 60000 : unit === "h" ? 3600000 : 86400000;
+    total += amount * factor;
+    match = pattern.exec(raw);
+  }
+  return matched ? total : null;
+}
+
+/** Atividades marcadas como Destaque da Semana, com o ganho já calculado. */
+function collectWeekHighlights(sections = []) {
+  const items = [];
+  (sections || []).forEach((section) => {
+    (section?.activities || []).forEach((activity) => {
+      if (!activity?.isWeekHighlight) return;
+      const before = safeText(activity.beforeValue);
+      const after = safeText(activity.afterValue);
+      if (!before || !after) return;
+
+      const beforeMs = parseDurationText(before);
+      const afterMs = parseDurationText(after);
+      let gainLabel = "";
+      if (beforeMs && afterMs != null && beforeMs > 0 && afterMs < beforeMs) {
+        gainLabel = `${Math.round(((beforeMs - afterMs) / beforeMs) * 100)}%`;
+      }
+
+      items.push({
+        title: safeText(activity.title) || "Destaque",
+        before,
+        after,
+        note: safeText(activity.highlightNote),
+        gainLabel,
+      });
+    });
+  });
+  return items;
 }
 
 function chunkList(items, size) {
@@ -971,15 +1093,17 @@ export async function exportDashboardPptx({
     });
   }
 
-  function panel(slide, { x, y, w, h, fill = LX.panel, border = LX.line }) {
+  // radius em polegadas: rectRadius é fração do menor lado, então convertemos
+  // para manter o mesmo arredondamento visual em cards de alturas diferentes.
+  function panel(slide, { x, y, w, h, fill = LX.panel, border = LX.line, radius = 0.13 }) {
     slide.addShape(pptx.ShapeType.roundRect, {
       x,
       y,
       w,
       h,
       fill: { color: fill },
-      line: { color: border, pt: 1 },
-      rectRadius: 0.06,
+      line: { color: border, pt: 0.75 },
+      rectRadius: Math.min(radius / Math.min(w, h), 0.5),
     });
   }
 
@@ -1069,34 +1193,35 @@ export async function exportDashboardPptx({
   const gap = 0.3;
   const unit = (CONTENT_W - gap * 3) / 4.35;
   const kpiY = 2.35;
-  const kpiH = 2.5;
+  const kpiH = 2.05;
   const wide = unit * 1.35;
 
-  panel(summary, { x: PAD, y: kpiY, w: wide, h: kpiH, fill: LX.deep, border: LX.gold });
+  panel(summary, { x: PAD, y: kpiY, w: wide, h: kpiH, fill: LX.deep, border: LX.goldSoft });
   summary.addText("INDICADOR CONSOLIDADO", {
-    x: PAD + 0.35,
-    y: kpiY + 0.35,
-    w: wide - 0.7,
-    h: 0.3,
+    x: PAD + 0.32,
+    y: kpiY + 0.26,
+    w: wide - 0.64,
+    h: 0.28,
     fontFace: BODY_FONT,
     fontSize: 10,
     color: "C9D2FF",
     charSpacing: 2,
   });
   summary.addText(String(consolidated), {
-    x: PAD + 0.35,
-    y: kpiY + 0.75,
-    w: wide - 0.7,
-    h: 1.05,
+    x: PAD + 0.32,
+    y: kpiY + 0.6,
+    w: wide - 0.64,
+    h: 0.85,
+    valign: "middle",
     fontFace: TITLE_FONT,
-    fontSize: 46,
+    fontSize: 44,
     color: LX.goldL,
   });
   summary.addText("chamados + atividades no período", {
-    x: PAD + 0.35,
-    y: kpiY + 1.85,
-    w: wide - 0.7,
-    h: 0.3,
+    x: PAD + 0.32,
+    y: kpiY + 1.5,
+    w: wide - 0.64,
+    h: 0.28,
     fontFace: BODY_FONT,
     fontSize: 10,
     color: "8D97C8",
@@ -1111,25 +1236,27 @@ export async function exportDashboardPptx({
     const x = PAD + wide + gap + index * (unit + gap);
     panel(summary, { x, y: kpiY, w: unit, h: kpiH });
     summary.addText(item.label, {
-      x: x + 0.3,
-      y: kpiY + 0.35,
-      w: unit - 0.6,
-      h: 0.5,
+      x: x + 0.28,
+      y: kpiY + 0.26,
+      w: unit - 0.56,
+      h: 0.4,
       fontFace: BODY_FONT,
       fontSize: 11,
       color: LX.muted,
     });
     summary.addText(String(item.value), {
-      x: x + 0.3,
-      y: kpiY + 0.95,
-      w: unit - 0.6,
-      h: 0.85,
+      x: x + 0.28,
+      y: kpiY + 0.68,
+      w: unit - 0.56,
+      h: 0.75,
+      valign: "middle",
       fontFace: BODY_FONT,
       fontSize: 34,
       bold: true,
       color: LX.ink,
     });
-    accentBar(summary, { x: x + 0.3, y: kpiY + 1.9, color: item.accent });
+    // Barra de acento logo abaixo do número, como no deck.
+    accentBar(summary, { x: x + 0.28, y: kpiY + 1.5, color: item.accent });
   });
   if (watermarkEnabled) addPptWatermark(summary, "CONFIDENCIAL");
   footer(summary);
@@ -1141,20 +1268,20 @@ export async function exportDashboardPptx({
   const cols = 3;
   const cardGap = 0.28;
   const cardW = (CONTENT_W - cardGap * (cols - 1)) / cols;
-  const cardH = 1.55;
+  const cardH = 1.32;
   rows.slice(0, 6).forEach((row, index) => {
     const col = index % cols;
     const line = Math.floor(index / cols);
     const x = PAD + col * (cardW + cardGap);
-    const y = 2.45 + line * (cardH + cardGap);
+    const y = 2.5 + line * (cardH + cardGap);
     const isGold = normalizeText(row.status).includes("conclu");
     panel(statusSlide, {
       x,
       y,
       w: cardW,
       h: cardH,
-      fill: LX.panel,
-      border: isGold ? LX.gold : LX.blue,
+      fill: isGold ? LX.goldTint : LX.blueTint,
+      border: isGold ? LX.goldSoft : LX.blueSoft,
     });
     // Layout horizontal: rótulo à esquerda, número à direita (igual ao deck).
     statusSlide.addText(safeText(row.status), {
@@ -1175,7 +1302,7 @@ export async function exportDashboardPptx({
       valign: "middle",
       align: "right",
       fontFace: BODY_FONT,
-      fontSize: 32,
+      fontSize: 38,
       bold: true,
       color: isGold ? LX.goldL : LX.ink,
     });
@@ -1184,7 +1311,7 @@ export async function exportDashboardPptx({
     `${operationalTotal} chamados no período · ${renegotiated} com prazo renegociado`,
     {
       x: PAD,
-      y: 6.35,
+      y: 5.75,
       w: CONTENT_W,
       h: 0.35,
       fontFace: BODY_FONT,
@@ -1271,6 +1398,130 @@ export async function exportDashboardPptx({
     if (watermarkEnabled) addPptWatermark(slaSlide, "CONFIDENCIAL");
     footer(slaSlide);
   }
+
+  // ---------- DESTAQUE DA SEMANA (antes -> depois) ----------
+  const weekHighlights = collectWeekHighlights(sections);
+  weekHighlights.forEach((item) => {
+    const slide = newSlide();
+    slide.addText(`DESTAQUE DA SEMANA · ${safeText(item.title).toUpperCase()}`, {
+      x: 0,
+      y: 1.35,
+      w: SLIDE_W,
+      h: 0.35,
+      align: "center",
+      fontFace: BODY_FONT,
+      fontSize: 11,
+      bold: true,
+      color: LX.gold,
+      charSpacing: 4,
+    });
+    slide.addText("Ganho de Performance", {
+      x: 0,
+      y: 1.78,
+      w: SLIDE_W,
+      h: 0.85,
+      align: "center",
+      fontFace: TITLE_FONT,
+      fontSize: 38,
+      color: LX.ink,
+    });
+
+    if (item.gainLabel) {
+      slide.addText(item.gainLabel, {
+        x: 0,
+        y: 2.75,
+        w: SLIDE_W,
+        h: 1.35,
+        align: "center",
+        fontFace: TITLE_FONT,
+        fontSize: 66,
+        color: LX.goldL,
+      });
+    }
+
+    // Cartões antes -> depois
+    const boxW = 2.2;
+    const arrowW = 0.7;
+    const totalW = boxW * 2 + arrowW;
+    const boxX = (SLIDE_W - totalW) / 2;
+    const boxY = item.gainLabel ? 4.25 : 3.1;
+
+    panel(slide, { x: boxX, y: boxY, w: boxW, h: 1.15, fill: LX.panel, border: LX.line });
+    slide.addText("ANTES", {
+      x: boxX,
+      y: boxY + 0.18,
+      w: boxW,
+      h: 0.28,
+      align: "center",
+      fontFace: BODY_FONT,
+      fontSize: 10,
+      color: LX.muted,
+      charSpacing: 2,
+    });
+    slide.addText(safeText(item.before), {
+      x: boxX,
+      y: boxY + 0.5,
+      w: boxW,
+      h: 0.5,
+      align: "center",
+      fontFace: BODY_FONT,
+      fontSize: 22,
+      bold: true,
+      color: LX.body,
+    });
+
+    slide.addText("→", {
+      x: boxX + boxW,
+      y: boxY,
+      w: arrowW,
+      h: 1.15,
+      align: "center",
+      valign: "middle",
+      fontFace: BODY_FONT,
+      fontSize: 20,
+      color: LX.gold,
+    });
+
+    const afterX = boxX + boxW + arrowW;
+    panel(slide, { x: afterX, y: boxY, w: boxW, h: 1.15, fill: LX.goldTint, border: LX.goldSoft });
+    slide.addText("DEPOIS", {
+      x: afterX,
+      y: boxY + 0.18,
+      w: boxW,
+      h: 0.28,
+      align: "center",
+      fontFace: BODY_FONT,
+      fontSize: 10,
+      color: LX.goldL,
+      charSpacing: 2,
+    });
+    slide.addText(safeText(item.after), {
+      x: afterX,
+      y: boxY + 0.5,
+      w: boxW,
+      h: 0.5,
+      align: "center",
+      fontFace: BODY_FONT,
+      fontSize: 22,
+      bold: true,
+      color: LX.goldL,
+    });
+
+    if (item.note) {
+      slide.addText(safeText(item.note), {
+        x: PAD,
+        y: boxY + 1.4,
+        w: CONTENT_W,
+        h: 0.4,
+        align: "center",
+        fontFace: BODY_FONT,
+        fontSize: 12,
+        color: LX.muted,
+      });
+    }
+    if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
+    footer(slide);
+  });
 
   // ---------- 5..N. SEÇÕES DE ATIVIDADES ----------
   const populatedSections = (sections || []).filter(
@@ -1414,7 +1665,7 @@ export async function exportDashboardPptx({
         const diffLabel =
           item.difficulty === "high" ? "Alta" : item.difficulty === "low" ? "Baixa" : "Média";
 
-        panel(slide, { x, y, w: rW, h: rH, border: LX.gold });
+        panel(slide, { x, y, w: rW, h: rH, border: LX.goldSoft });
         slide.addText(safeText(item.title) || "Item", {
           x: x + 0.3,
           y: y + 0.28,
