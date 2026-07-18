@@ -38,9 +38,6 @@ export default function TicketSummaryCard({ summary, loading, error, onRefresh }
           entries.map((entry) => (
             <li key={entry.status} className="status-card">
               <span className="status-title">{entry.status}</span>
-              <span className="status-combined-chip" title="Filtro combinado">
-                {entry.combined}
-              </span>
               <strong className="status-value">{entry.primary}</strong>
             </li>
           ))
