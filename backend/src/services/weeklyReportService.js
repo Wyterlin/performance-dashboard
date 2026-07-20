@@ -34,6 +34,7 @@ const TEAM_MEMBER_MAX = 60;
 const TEAM_MEMBER_LIMIT = 10;
 const CYCLE_IMPLANTATION_MAX = 50;
 const CYCLE_TIME_MAX = 40;
+const SYSTEM_EFFECT_MAX = 180;
 const ROADMAP_DIFFICULTY = new Set(["low", "medium", "high"]);
 const ROADMAP_CATEGORY = new Set(["Infraestrutura", "Dados", "Processos"]);
 
@@ -167,6 +168,8 @@ function normalizeSections(payload) {
         id: activity.id || randomUUID(),
         title: String(activity.title || "").trim(),
         activity: String(activity.activity || "").trim(),
+        // Efeito que a atividade causa no sistema (opcional).
+        systemEffect: String(activity.systemEffect || "").trim().slice(0, SYSTEM_EFFECT_MAX),
         highlight: String(activity.highlight || "").trim(),
         called: sanitizeCalled(activity.called),
         projectTeam: sanitizeProjectTeam(activity.projectTeam),

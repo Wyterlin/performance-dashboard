@@ -784,6 +784,19 @@ export async function exportDashboardPdf({
         const desc = doc.splitTextToSize(preserveMultiline(activity?.activity) || "", aW - 40);
         doc.text(desc.slice(0, 4), x + 18, y + 50);
 
+        const effect = preserveMultiline(activity?.systemEffect);
+        if (effect) {
+          setTextFromHex(doc, LX.blueL);
+          doc.setFontSize(8.5);
+          doc.text(
+            // Sem glifo decorativo: o PDF usa Helvetica (WinAnsi) e símbolos
+            // fora dessa tabela saem corrompidos.
+            doc.splitTextToSize(`Efeito no sistema: ${effect}`, aW - 40).slice(0, 2),
+            x + 18,
+            y + aH - 70
+          );
+        }
+
         const chips = [];
         if (safeText(activity?.called)) chips.push(`Chamado ${safeText(activity.called)}`);
         if (safeText(activity?.cycleTime)) chips.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
@@ -1646,6 +1659,7 @@ export async function exportDashboardPptx({
   // Desenha um card de atividade (aresta esquerda reta + barra de acento).
   function activityCard(slide, activity, { x, y, w, h }) {
     const highlight = safeText(activity?.highlight);
+    const effect = preserveMultiline(activity?.systemEffect);
     const accent = highlight ? LX.gold : LX.blue;
 
     panel(slide, { x, y, w, h });
@@ -1671,11 +1685,40 @@ export async function exportDashboardPptx({
       bold: true,
       color: LX.ink,
     });
+    const chips = [];
+    if (safeText(activity?.called)) chips.push(`Chamado ${safeText(activity.called)}`);
+    if (safeText(activity?.cycleTime)) chips.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
+    if (Array.isArray(activity?.projectTeam) && activity.projectTeam.length) {
+      chips.push(`Equipe: ${activity.projectTeam.join(", ")}`);
+    }
+
+    // Rodapé do card montado de baixo para cima, para que descrição, efeito,
+    // chips e destaque nunca se sobreponham em nenhuma combinação.
+    const bottomRows = [];
+    if (highlight) {
+      bottomRows.push({ text: `★ ${highlight}`, color: LX.goldL, fontSize: 11, h: 0.42 });
+    }
+    if (chips.length) {
+      bottomRows.push({ text: chips.join("   ·   "), color: LX.blueL, fontSize: 10, h: 0.3 });
+    }
+    if (effect) {
+      bottomRows.push({
+        text: `Efeito no sistema: ${truncateRoadmapText(effect, 110)}`,
+        color: LX.blueL,
+        fontSize: 10,
+        h: 0.36,
+      });
+    }
+
+    const bottomTotal = bottomRows.reduce((acc, row) => acc + row.h, 0);
+    const descriptionTop = y + 0.88;
+    const descriptionH = Math.max(0.44, y + h - 0.16 - bottomTotal - descriptionTop);
+
     slide.addText(preserveMultiline(activity?.activity) || "", {
       x: padL,
-      y: y + 0.88,
+      y: descriptionTop,
       w: innerW,
-      h: highlight ? 0.78 : 1.15,
+      h: descriptionH,
       fontFace: BODY_FONT,
       fontSize: 12.5,
       color: LX.muted,
@@ -1683,34 +1726,20 @@ export async function exportDashboardPptx({
       valign: "top",
     });
 
-    const chips = [];
-    if (safeText(activity?.called)) chips.push(`Chamado ${safeText(activity.called)}`);
-    if (safeText(activity?.cycleTime)) chips.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
-    if (Array.isArray(activity?.projectTeam) && activity.projectTeam.length) {
-      chips.push(`Equipe: ${activity.projectTeam.join(", ")}`);
-    }
-    if (chips.length) {
-      slide.addText(chips.join("   ·   "), {
+    let bottomCursor = y + h - 0.16;
+    bottomRows.forEach((row) => {
+      bottomCursor -= row.h;
+      slide.addText(row.text, {
         x: padL,
-        y: y + h - (highlight ? 0.95 : 0.55),
+        y: bottomCursor,
         w: innerW,
-        h: 0.3,
+        h: row.h,
         fontFace: BODY_FONT,
-        fontSize: 10,
-        color: LX.blueL,
+        fontSize: row.fontSize,
+        color: row.color,
+        valign: "top",
       });
-    }
-    if (highlight) {
-      slide.addText(`★ ${highlight}`, {
-        x: padL,
-        y: y + h - 0.6,
-        w: innerW,
-        h: 0.42,
-        fontFace: BODY_FONT,
-        fontSize: 11,
-        color: LX.goldL,
-      });
-    }
+    });
   }
 
   // Card de destaque azul (usado pelo "Fluxo Atendido").

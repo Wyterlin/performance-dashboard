@@ -900,7 +900,7 @@ h3 {
   background: var(--bluebg);
 }
 
-.activity-item:has(.highlight-chip:not(.team-chip)) {
+.activity-item:has(.highlight-chip:not(.team-chip):not(.effect-chip)) {
   border-left-color: var(--gold);
   background: var(--goldbg);
 }
@@ -1104,6 +1104,11 @@ h3 {
 
 .team-chip {
   color: var(--muted);
+  font-size: 11px;
+}
+
+.effect-chip {
+  color: var(--blueL);
   font-size: 11px;
 }
 

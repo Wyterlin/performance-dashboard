@@ -9,6 +9,7 @@ const ROADMAP_TITLE_MAX = 35;
 const ROADMAP_SUBTITLE_MAX = 35;
 const ACTIVITY_MAX = 120;
 const HIGHLIGHT_MAX = 240;
+const SYSTEM_EFFECT_MAX = 180;
 const PROJECT_TEAM_MAX = 220;
 const CYCLE_IMPLANTATION_MAX = 50;
 const CYCLE_TIME_MAX = 40;
@@ -24,6 +25,7 @@ const FIELD_LABELS = {
   subtitle: "Subtítulo",
   impact: "Impacto",
   activity: "Atividade",
+  systemEffect: "Efeito no Sistema",
   highlight: "Pontos a Destacar",
   highlightNote: "Observação do ganho",
   cycleImplantation: "Ciclo de Implantação",
@@ -40,6 +42,7 @@ function softCap(value, max) {
 const EMPTY_DRAFT = {
   title: "",
   activity: "",
+  systemEffect: "",
   highlight: "",
   called: "",
   projectTeamInput: "",
@@ -96,9 +99,9 @@ export default function SectionActivities({
   const hasDifficultyFilter = isRoadmapSection && String(roadmapDifficultyFilter || "") !== "all";
   const visibleActivities = normalizedSearch
     ? orderedActivities.filter((item) => {
-        const haystack = `${item.title || ""} ${item.activity || ""} ${item.highlight || ""} ${
-          item.called || ""
-        } ${item.subtitle || ""} ${item.impact || item.benefit || ""} ${item.category || ""}`.toLowerCase();
+        const haystack = `${item.title || ""} ${item.activity || ""} ${item.systemEffect || ""} ${
+          item.highlight || ""
+        } ${item.called || ""} ${item.subtitle || ""} ${item.impact || item.benefit || ""} ${item.category || ""}`.toLowerCase();
         const projectTeamText = Array.isArray(item.projectTeam)
           ? item.projectTeam.join(" ").toLowerCase()
           : "";
@@ -146,6 +149,7 @@ export default function SectionActivities({
     : [
         ["title", TITLE_MAX],
         ["activity", ACTIVITY_MAX],
+        ["systemEffect", SYSTEM_EFFECT_MAX],
         ["projectTeamInput", PROJECT_TEAM_MAX],
         ["highlight", HIGHLIGHT_MAX],
         ...(draft.isWeekHighlight ? [["highlightNote", HIGHLIGHT_NOTE_MAX]] : []),
@@ -239,6 +243,7 @@ export default function SectionActivities({
     setDraft({
       title: String(item.title || ""),
       activity: String(item.activity || ""),
+      systemEffect: String(item.systemEffect || ""),
       highlight: String(item.highlight || ""),
       called: String(item.called || ""),
       projectTeamInput: Array.isArray(item.projectTeam) ? item.projectTeam.join(", ") : "",
@@ -476,6 +481,9 @@ export default function SectionActivities({
                 {item.called ? <p className="called-chip">Chamado: {item.called}</p> : null}
                 {item.cycleTime ? <p className="called-chip">Tempo de Ciclo (Cycle Time): {item.cycleTime}</p> : null}
                 <p className="activity-description">{item.activity}</p>
+                {item.systemEffect ? (
+                  <p className="highlight-chip effect-chip">Efeito no Sistema: {item.systemEffect}</p>
+                ) : null}
                 {Array.isArray(item.projectTeam) && item.projectTeam.length ? (
                   <p className="highlight-chip team-chip">Equipe do Projeto: {item.projectTeam.join(", ")}</p>
                 ) : null}
@@ -624,6 +632,21 @@ export default function SectionActivities({
                         placeholder={ACTIVITY_PLACEHOLDER}
                       />
                       <CharCounter value={draft.activity} max={ACTIVITY_MAX} />
+                    </label>
+                  ) : null}
+
+                  {!isRoadmapSection ? (
+                    <label>
+                      Efeito no Sistema (opcional)
+                      <textarea
+                        rows="3"
+                        value={draft.systemEffect}
+                        onChange={(event) =>
+                          updateDraft("systemEffect", event.target.value, SYSTEM_EFFECT_MAX)
+                        }
+                        placeholder="O que muda no sistema depois desta atividade (ex.: comportamento, performance, integração ou risco eliminado)."
+                      />
+                      <CharCounter value={draft.systemEffect} max={SYSTEM_EFFECT_MAX} />
                     </label>
                   ) : null}
 

@@ -166,6 +166,7 @@ export function useWeeklyReport() {
         id: activity.id || crypto.randomUUID(),
         title: activity.title || "",
         activity: activity.activity || "",
+        systemEffect: activity.systemEffect || "",
         highlight: activity.highlight || "",
         called: activity.called || "",
         projectTeam: normalizeProjectTeam(activity.projectTeam),
@@ -350,6 +351,7 @@ export function useWeeklyReport() {
   const upsertActivity = useCallback((sectionIndex, draft, activityId = null) => {
     const title = String(draft.title || "").trim();
     const activity = String(draft.activity || "").trim();
+    const systemEffect = String(draft.systemEffect || "").trim().slice(0, 180);
     const highlight = String(draft.highlight || "").trim();
     const called = String(draft.called || "").replace(/\D+/g, "").slice(0, 20);
     const projectTeam = normalizeProjectTeam(draft.projectTeam);
@@ -409,6 +411,7 @@ export function useWeeklyReport() {
                     ...item,
                     title,
                     activity,
+                    systemEffect,
                     highlight,
                     called,
                     projectTeam,
@@ -443,6 +446,7 @@ export function useWeeklyReport() {
           id: crypto.randomUUID(),
           title,
           activity,
+          systemEffect,
           highlight,
           called,
           projectTeam,
