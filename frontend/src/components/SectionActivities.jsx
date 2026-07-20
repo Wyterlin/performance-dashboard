@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  ACTIVITY_STATUS,
+  DEFAULT_ACTIVITY_STATUS,
+  getActivityStatus,
+} from "../constants/activityStatus";
 import CharCounter from "./CharCounter";
 import DurationInput from "./DurationInput";
 import FlowStepsInput from "./FlowStepsInput";
@@ -42,6 +47,7 @@ function softCap(value, max) {
 const EMPTY_DRAFT = {
   title: "",
   activity: "",
+  status: DEFAULT_ACTIVITY_STATUS,
   systemEffect: "",
   highlight: "",
   called: "",
@@ -243,6 +249,7 @@ export default function SectionActivities({
     setDraft({
       title: String(item.title || ""),
       activity: String(item.activity || ""),
+      status: getActivityStatus(item.status).value,
       systemEffect: String(item.systemEffect || ""),
       highlight: String(item.highlight || ""),
       called: String(item.called || ""),
@@ -390,7 +397,17 @@ export default function SectionActivities({
             return (
               <li key={item.id} className="activity-item">
                 <div className="activity-item-header">
-                  <h3>{item.title}</h3>
+                  <div className="activity-item-heading">
+                    {!isRoadmapSection ? (
+                      <span
+                        className="status-badge"
+                        style={{ "--status-color": `#${getActivityStatus(item.status).color}` }}
+                      >
+                        {getActivityStatus(item.status).label}
+                      </span>
+                    ) : null}
+                    <h3>{item.title}</h3>
+                  </div>
                   <div className="activity-item-tools">
                     <div className="item-order-controls" aria-label={`Ordenação da atividade ${item.title}`}>
                       <button
@@ -632,6 +649,24 @@ export default function SectionActivities({
                         placeholder={ACTIVITY_PLACEHOLDER}
                       />
                       <CharCounter value={draft.activity} max={ACTIVITY_MAX} />
+                    </label>
+                  ) : null}
+
+                  {!isRoadmapSection ? (
+                    <label>
+                      Status
+                      <select
+                        value={draft.status}
+                        onChange={(event) =>
+                          setDraft((prev) => ({ ...prev, status: event.target.value }))
+                        }
+                      >
+                        {ACTIVITY_STATUS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.dot} {option.label}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                   ) : null}
 

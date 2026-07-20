@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDefaultTopics, getTicketSummary, getWeek, saveWeek } from "../services/api";
+import { getActivityStatus } from "../constants/activityStatus";
 
 const RANGE_STORAGE_KEY = "performance-dashboard:selected-range";
 const THEME_STORAGE_KEY = "performance-dashboard:theme";
@@ -166,6 +167,7 @@ export function useWeeklyReport() {
         id: activity.id || crypto.randomUUID(),
         title: activity.title || "",
         activity: activity.activity || "",
+        status: getActivityStatus(activity.status).value,
         systemEffect: activity.systemEffect || "",
         highlight: activity.highlight || "",
         called: activity.called || "",
@@ -351,6 +353,7 @@ export function useWeeklyReport() {
   const upsertActivity = useCallback((sectionIndex, draft, activityId = null) => {
     const title = String(draft.title || "").trim();
     const activity = String(draft.activity || "").trim();
+    const status = getActivityStatus(draft.status).value;
     const systemEffect = String(draft.systemEffect || "").trim().slice(0, 180);
     const highlight = String(draft.highlight || "").trim();
     const called = String(draft.called || "").replace(/\D+/g, "").slice(0, 20);
@@ -411,6 +414,7 @@ export function useWeeklyReport() {
                     ...item,
                     title,
                     activity,
+                    status,
                     systemEffect,
                     highlight,
                     called,
@@ -446,6 +450,7 @@ export function useWeeklyReport() {
           id: crypto.randomUUID(),
           title,
           activity,
+          status,
           systemEffect,
           highlight,
           called,

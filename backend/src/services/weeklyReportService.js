@@ -35,6 +35,8 @@ const TEAM_MEMBER_LIMIT = 10;
 const CYCLE_IMPLANTATION_MAX = 50;
 const CYCLE_TIME_MAX = 40;
 const SYSTEM_EFFECT_MAX = 180;
+const ACTIVITY_STATUS = new Set(["done", "doing", "validating", "blocked"]);
+const DEFAULT_ACTIVITY_STATUS = "done";
 const ROADMAP_DIFFICULTY = new Set(["low", "medium", "high"]);
 const ROADMAP_CATEGORY = new Set(["Infraestrutura", "Dados", "Processos"]);
 
@@ -103,6 +105,11 @@ function sanitizeCategory(value) {
   return normalized;
 }
 
+function sanitizeStatus(value) {
+  const normalized = String(value || "").trim();
+  return ACTIVITY_STATUS.has(normalized) ? normalized : DEFAULT_ACTIVITY_STATUS;
+}
+
 function buildDefaultSections() {
   return DEFAULT_SECTIONS.map((name) => ({
     name,
@@ -168,6 +175,7 @@ function normalizeSections(payload) {
         id: activity.id || randomUUID(),
         title: String(activity.title || "").trim(),
         activity: String(activity.activity || "").trim(),
+        status: sanitizeStatus(activity.status),
         // Efeito que a atividade causa no sistema (opcional).
         systemEffect: String(activity.systemEffect || "").trim().slice(0, SYSTEM_EFFECT_MAX),
         highlight: String(activity.highlight || "").trim(),

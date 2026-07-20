@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import PptxGenJS from "pptxgenjs";
+import { ACTIVITY_STATUS, getActivityStatus } from "../constants/activityStatus";
 
 const PPT_THEME = {
   sapBlue: "005483",
@@ -153,6 +154,14 @@ function formatSyncTimestamp() {
   return new Date().toLocaleString("pt-BR");
 }
 
+/** Carimbo do rodapé do deck: "19/07/2026 • 23:41". */
+function formatSyncStamp() {
+  const now = new Date();
+  const date = now.toLocaleDateString("pt-BR");
+  const time = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `${date} • ${time}`;
+}
+
 function addStandardFooter(slide, syncText) {
   slide.addText(syncText, {
     x: 0.4,
@@ -287,6 +296,22 @@ function splitActivitiesForPpt(activities) {
 
   if (current.length) pages.push(current);
   return pages;
+}
+
+/** Totais por status das atividades manuais (o roadmap fica de fora). */
+function buildStatusOverview(sections) {
+  const counts = Object.fromEntries(ACTIVITY_STATUS.map((item) => [item.value, 0]));
+  let total = 0;
+
+  (sections || []).forEach((section) => {
+    if (isRoadmapSectionName(section?.name)) return;
+    (section?.activities || []).forEach((activity) => {
+      total += 1;
+      counts[getActivityStatus(activity?.status).value] += 1;
+    });
+  });
+
+  return { total, counts };
 }
 
 function isRoadmapSectionName(name) {
@@ -1145,7 +1170,6 @@ export async function exportDashboardPptx({
   pptx.title = "Performance Dashboard";
 
   const watermarkEnabled = Boolean(options.watermark);
-  const syncText = `Sincronização: SULTS API Service | ${formatSyncTimestamp()}`;
 
   const sectionKpis = manualSectionKpis(sections);
   const manualTotal = sectionKpis.reduce((acc, item) => acc + item.total, 0);
@@ -1160,6 +1184,8 @@ export async function exportDashboardPptx({
   const rows = statusRows(ticketSummary);
   const metrics = ticketSummary?.metrics || null;
 
+  const statusOverview = buildStatusOverview(sections);
+
   // ---------- helpers de desenho ----------
   function newSlide(variant = "content") {
     const slide = pptx.addSlide();
@@ -1169,14 +1195,29 @@ export async function exportDashboardPptx({
   }
 
   function footer(slide) {
-    slide.addText(syncText, {
+    // Traço dourado no lugar de um ícone: as fontes do deck não têm glifo de
+    // sincronização confiável em todas as máquinas.
+    accentBar(slide, { x: PAD, y: 6.83, w: 0.28, h: 0.035, color: LX.gold });
+
+    slide.addText("ATUALIZADO EM", {
       x: PAD,
-      y: 6.95,
+      y: 6.88,
       w: CONTENT_W,
-      h: 0.3,
+      h: 0.2,
       fontFace: BODY_FONT,
-      fontSize: 9,
-      color: LX.dim,
+      fontSize: 8,
+      bold: true,
+      color: LX.gold,
+      charSpacing: 2,
+    });
+    slide.addText(`${formatSyncStamp()}  ·  SULTS API Service`, {
+      x: PAD,
+      y: 7.1,
+      w: CONTENT_W,
+      h: 0.26,
+      fontFace: BODY_FONT,
+      fontSize: 11,
+      color: LX.muted,
     });
   }
 
@@ -1656,10 +1697,40 @@ export async function exportDashboardPptx({
       section.activities.length > 0
   );
 
-  // Desenha um card de atividade (aresta esquerda reta + barra de acento).
+  // Badge de status no canto superior direito do card.
+  function statusBadge(slide, status, { x, y, w = 1.5, h = 0.28 }) {
+    slide.addShape(pptx.ShapeType.roundRect, {
+      x,
+      y,
+      w,
+      h,
+      fill: { color: LX.panel2 },
+      line: { color: status.color, pt: 0.75 },
+      rectRadius: Math.min(0.14 / Math.min(w, h), 0.5),
+    });
+    slide.addText(status.label.toUpperCase(), {
+      x,
+      y,
+      w,
+      h,
+      align: "center",
+      valign: "middle",
+      fontFace: BODY_FONT,
+      fontSize: 8.5,
+      bold: true,
+      color: status.color,
+      charSpacing: 1.5,
+    });
+  }
+
+  /**
+   * Card de atividade. A hierarquia é resultado > descrição técnica: quem lê o
+   * deck é gestor, então o ganho entregue vem antes do detalhe de implementação.
+   */
   function activityCard(slide, activity, { x, y, w, h }) {
     const highlight = safeText(activity?.highlight);
     const effect = preserveMultiline(activity?.systemEffect);
+    const status = getActivityStatus(activity?.status);
     const accent = highlight ? LX.gold : LX.blue;
 
     panel(slide, { x, y, w, h });
@@ -1675,16 +1746,32 @@ export async function exportDashboardPptx({
 
     const padL = x + 0.42;
     const innerW = w - 0.84;
+    const badgeW = 1.5;
+
+    statusBadge(slide, status, { x: x + w - 0.42 - badgeW, y: y + 0.26, w: badgeW });
+
     slide.addText(safeText(activity?.title) || "Atividade", {
       x: padL,
-      y: y + 0.3,
-      w: innerW,
-      h: 0.5,
+      y: y + 0.22,
+      w: innerW - badgeW - 0.18,
+      h: 0.44,
       fontFace: BODY_FONT,
       fontSize: 17,
       bold: true,
       color: LX.ink,
+      valign: "middle",
     });
+
+    // Fio fino separando o cabeçalho do conteúdo.
+    slide.addShape(pptx.ShapeType.rect, {
+      x: padL,
+      y: y + 0.78,
+      w: innerW,
+      h: 0.012,
+      fill: { color: LX.line },
+      line: { color: LX.line, pt: 0 },
+    });
+
     const chips = [];
     if (safeText(activity?.called)) chips.push(`Chamado ${safeText(activity.called)}`);
     if (safeText(activity?.cycleTime)) chips.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
@@ -1692,41 +1779,72 @@ export async function exportDashboardPptx({
       chips.push(`Equipe: ${activity.projectTeam.join(", ")}`);
     }
 
-    // Rodapé do card montado de baixo para cima, para que descrição, efeito,
-    // chips e destaque nunca se sobreponham em nenhuma combinação.
+    // Rodapé montado de baixo para cima: nada se sobrepõe em nenhuma combinação.
     const bottomRows = [];
     if (highlight) {
       bottomRows.push({ text: `★ ${highlight}`, color: LX.goldL, fontSize: 11, h: 0.42 });
     }
     if (chips.length) {
-      bottomRows.push({ text: chips.join("   ·   "), color: LX.blueL, fontSize: 10, h: 0.3 });
+      bottomRows.push({ text: chips.join("   ·   "), color: LX.dim, fontSize: 9.5, h: 0.28 });
     }
-    if (effect) {
-      bottomRows.push({
-        text: `Efeito no sistema: ${truncateRoadmapText(effect, 110)}`,
-        color: LX.blueL,
-        fontSize: 10,
-        h: 0.36,
-      });
-    }
-
     const bottomTotal = bottomRows.reduce((acc, row) => acc + row.h, 0);
-    const descriptionTop = y + 0.88;
-    const descriptionH = Math.max(0.44, y + h - 0.16 - bottomTotal - descriptionTop);
 
+    let cursor = y + 0.94;
+
+    if (effect) {
+      slide.addText("RESULTADO", {
+        x: padL,
+        y: cursor,
+        w: innerW,
+        h: 0.2,
+        fontFace: BODY_FONT,
+        fontSize: 9,
+        bold: true,
+        color: LX.gold,
+        charSpacing: 2.5,
+      });
+      cursor += 0.24;
+
+      // Quebra de linha ou ";" viram itens; senão fica uma única linha com ✔.
+      const items = effect
+        .split(/\n|;/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const effectLines = items.reduce(
+        (acc, item) => acc + Math.max(1, Math.ceil((item.length + 3) / 46)),
+        0
+      );
+      const effectH = Math.min(1.4, Math.max(0.3, effectLines * 0.27));
+
+      slide.addText(items.map((item) => `✔  ${item}`).join("\n"), {
+        x: padL,
+        y: cursor,
+        w: innerW,
+        h: effectH,
+        fontFace: BODY_FONT,
+        fontSize: 13,
+        color: LX.body,
+        lineSpacingMultiple: 1.25,
+        valign: "top",
+      });
+      cursor += effectH + 0.18;
+    }
+
+    const descriptionH = Math.max(0.3, y + h - 0.18 - bottomTotal - cursor);
     slide.addText(preserveMultiline(activity?.activity) || "", {
       x: padL,
-      y: descriptionTop,
+      y: cursor,
       w: innerW,
       h: descriptionH,
       fontFace: BODY_FONT,
-      fontSize: 12.5,
+      // Menor e mais apagada que o resultado: é o detalhe técnico de apoio.
+      fontSize: 11,
       color: LX.muted,
-      lineSpacingMultiple: 1.3,
+      lineSpacingMultiple: 1.25,
       valign: "top",
     });
 
-    let bottomCursor = y + h - 0.16;
+    let bottomCursor = y + h - 0.18;
     bottomRows.forEach((row) => {
       bottomCursor -= row.h;
       slide.addText(row.text, {
@@ -1739,6 +1857,97 @@ export async function exportDashboardPptx({
         color: row.color,
         valign: "top",
       });
+    });
+  }
+
+  /**
+   * Painel de panorama: ocupa a coluna livre quando a página tem um card só.
+   * Mostra o total da semana e a distribuição por status.
+   */
+  function overviewCard(slide, { x, y, w, h }) {
+    panel(slide, { x, y, w, h, fill: LX.blueTint, border: LX.blueSoft });
+
+    const padL = x + 0.5;
+    const innerW = w - 1;
+
+    slide.addText("PANORAMA DA SEMANA", {
+      x: padL,
+      y: y + 0.42,
+      w: innerW,
+      h: 0.24,
+      fontFace: BODY_FONT,
+      fontSize: 9,
+      bold: true,
+      color: LX.gold,
+      charSpacing: 2.5,
+    });
+
+    slide.addText(
+      [
+        { text: String(statusOverview.total), options: { fontSize: 46, color: LX.ink } },
+        { text: "  atividades", options: { fontSize: 15, color: LX.muted } },
+      ],
+      {
+        x: padL,
+        y: y + 0.72,
+        w: innerW,
+        h: 0.8,
+        fontFace: TITLE_FONT,
+        valign: "middle",
+      }
+    );
+
+    // Barra proporcional: uma faixa por status, na largura do painel.
+    const present = ACTIVITY_STATUS.filter((item) => statusOverview.counts[item.value] > 0);
+    if (statusOverview.total > 0) {
+      let barX = padL;
+      present.forEach((item) => {
+        const segW = (statusOverview.counts[item.value] / statusOverview.total) * innerW;
+        slide.addShape(pptx.ShapeType.rect, {
+          x: barX,
+          y: y + 1.66,
+          w: segW,
+          h: 0.13,
+          fill: { color: item.color },
+          line: { color: item.color, pt: 0 },
+        });
+        barX += segW;
+      });
+    }
+
+    let rowY = y + 2.05;
+    present.forEach((item) => {
+      slide.addShape(pptx.ShapeType.ellipse, {
+        x: padL,
+        y: rowY + 0.11,
+        w: 0.11,
+        h: 0.11,
+        fill: { color: item.color },
+        line: { color: item.color, pt: 0 },
+      });
+      slide.addText(item.label, {
+        x: padL + 0.26,
+        y: rowY,
+        w: innerW - 1,
+        h: 0.32,
+        fontFace: BODY_FONT,
+        fontSize: 12,
+        color: LX.body,
+        valign: "middle",
+      });
+      slide.addText(String(statusOverview.counts[item.value]), {
+        x: padL + innerW - 0.7,
+        y: rowY,
+        w: 0.7,
+        h: 0.32,
+        align: "right",
+        fontFace: BODY_FONT,
+        fontSize: 13,
+        bold: true,
+        color: item.color,
+        valign: "middle",
+      });
+      rowY += 0.38;
     });
   }
 
@@ -1774,7 +1983,7 @@ export async function exportDashboardPptx({
     // Atividades com "Fluxo Atendido" ganham slide próprio, ao lado do card.
     const withFlow = activities.filter((item) => flowStepsText(item));
     const withoutFlow = activities.filter((item) => !flowStepsText(item));
-    const pages = chunkList(withoutFlow, 4);
+    const pages = chunkList(withoutFlow, 2);
     const totalSlides = pages.length + withFlow.length;
     let slideNo = 0;
 
@@ -1801,18 +2010,22 @@ export async function exportDashboardPptx({
 
       const aGap = 0.32;
       const aW = (CONTENT_W - aGap) / 2;
-      const aH = pageItems.length > 2 ? 2.05 : 2.6;
+      const aH = 4.3;
 
       pageItems.forEach((activity, index) => {
-        const col = index % 2;
-        const line = Math.floor(index / 2);
         activityCard(slide, activity, {
-          x: PAD + col * (aW + aGap),
-          y: 2.3 + line * (aH + aGap),
+          x: PAD + index * (aW + aGap),
+          y: 2.3,
           w: aW,
           h: aH,
         });
       });
+
+      // Página com um card só deixaria metade do slide vazia: o panorama da
+      // semana ocupa a coluna livre em vez de esticar o card.
+      if (pageItems.length === 1) {
+        overviewCard(slide, { x: PAD + aW + aGap, y: 2.3, w: aW, h: aH });
+      }
 
       if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
       footer(slide);
