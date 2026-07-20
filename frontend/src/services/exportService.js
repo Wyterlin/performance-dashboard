@@ -298,6 +298,40 @@ function splitActivitiesForPpt(activities) {
   return pages;
 }
 
+/**
+ * Metadados exibidos na grade do rodapé do card. Só entra o que existe — sem
+ * dado, o campo some em vez de virar uma célula vazia.
+ */
+function buildActivityMeta(activity) {
+  const meta = [];
+  if (safeText(activity?.called)) {
+    meta.push({ label: "CHAMADO", value: safeText(activity.called) });
+  }
+  if (safeText(activity?.cycleTime)) {
+    meta.push({ label: "TEMPO INVESTIDO", value: safeText(activity.cycleTime) });
+  }
+  if (Array.isArray(activity?.projectTeam) && activity.projectTeam.length) {
+    meta.push({ label: "EQUIPE", value: activity.projectTeam.join(", ") });
+  }
+  if (Number(activity?.position) > 0) {
+    meta.push({ label: "PRIORIDADE", value: String(Number(activity.position)) });
+  }
+  return meta;
+}
+
+/** Entregas por seção, para o resumo executivo do fim do relatório. */
+function buildDeliverySummary(sections) {
+  const rows = (sections || [])
+    .filter((section) => !isRoadmapSectionName(section?.name))
+    .map((section) => ({
+      name: safeText(section?.name) || "Seção",
+      total: Number(section?.activities?.length || 0),
+    }))
+    .filter((row) => row.total > 0);
+
+  return { rows, total: rows.reduce((acc, row) => acc + row.total, 0) };
+}
+
 /** Totais por status das atividades manuais (o roadmap fica de fora). */
 function buildStatusOverview(sections) {
   const counts = Object.fromEntries(ACTIVITY_STATUS.map((item) => [item.value, 0]));
@@ -515,6 +549,47 @@ export async function exportDashboardPdf({
     doc.rect(x, y, w, 3, "F");
   }
 
+  /** Rótulo de bloco com marcador dourado, gêmeo do usado no deck. */
+  function blockLabelPdf(text, x, y) {
+    setFillFromHex(doc, LX.gold);
+    doc.rect(x, y - 4.5, 3.5, 3.5, "F");
+    setTextFromHex(doc, LX.gold);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(7.5);
+    doc.text(text, x + 8, y, { charSpace: 1.6 });
+  }
+
+  /** Selo de status em cápsula: fundo tingido, ponto e rótulo. */
+  function statusBadgePdf(status, x, y, w = 104, h = 18) {
+    setFillFromHex(doc, status.tint);
+    setDrawFromHex(doc, status.color);
+    doc.setLineWidth(0.7);
+    doc.roundedRect(x, y, w, h, h / 2, h / 2, "FD");
+    setFillFromHex(doc, status.color);
+    doc.circle(x + 12, y + h / 2, 3, "F");
+    setTextFromHex(doc, status.color);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(6.5);
+    doc.text(status.label.toUpperCase(), x + 21, y + h / 2 + 2.4, { charSpace: 0.8 });
+  }
+
+  /** Grade de metadados em duas colunas no rodapé do card. */
+  function metaGridPdf(entries, x, y, w) {
+    const colW = w / 2;
+    entries.forEach((entry, index) => {
+      const cellX = x + (index % 2) * colW;
+      const cellY = y + Math.floor(index / 2) * 30;
+      setTextFromHex(doc, LX.dim);
+      doc.setFont(SANS, "bold");
+      doc.setFontSize(6);
+      doc.text(entry.label, cellX, cellY, { charSpace: 1.2 });
+      setTextFromHex(doc, LX.body);
+      doc.setFont(SANS, "normal");
+      doc.setFontSize(9.5);
+      doc.text(doc.splitTextToSize(entry.value, colW - 8).slice(0, 1), cellX, cellY + 12);
+    });
+  }
+
   /**
    * Mede o card antes de desenhar. A altura acompanha o conteúdo: no A4
    * paisagem um card de altura fixa deixaria um vão entre a descrição e o
@@ -526,17 +601,6 @@ export async function exportDashboardPdf({
     const effect = preserveMultiline(activity?.systemEffect);
 
     doc.setFont(SANS, "normal");
-    doc.setFontSize(8);
-    const chipParts = [];
-    if (safeText(activity?.called)) chipParts.push(`Chamado ${safeText(activity.called)}`);
-    if (safeText(activity?.cycleTime)) chipParts.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
-    if (Array.isArray(activity?.projectTeam) && activity.projectTeam.length) {
-      chipParts.push(`Equipe: ${activity.projectTeam.join(", ")}`);
-    }
-    const chipLines = chipParts.length
-      ? doc.splitTextToSize(chipParts.join("   ·   "), innerW).slice(0, 2)
-      : [];
-
     doc.setFontSize(8.5);
     const highlightLines = highlight
       ? doc.splitTextToSize(`» ${highlight}`, innerW).slice(0, 2)
@@ -563,20 +627,25 @@ export async function exportDashboardPdf({
     }
     contentH += descriptionLines.length * 12;
 
-    const bottomH =
-      chipLines.length * 11 +
-      highlightLines.length * 11 +
-      (chipLines.length && highlightLines.length ? 6 : 0);
+    // Rótulo "ATIVIDADE" acima da descrição.
+    contentH += 17;
+
+    const meta = buildActivityMeta(activity);
+    const metaH = meta.length ? Math.ceil(meta.length / 2) * 30 + 4 : 0;
+    const observationH = highlightLines.length ? 17 + highlightLines.length * 11 : 0;
+    const bottomH = metaH + observationH;
 
     return {
       innerW,
       highlight,
-      chipLines,
+      meta,
+      metaH,
+      observationH,
       highlightLines,
       effectItems,
       descriptionLines,
       bottomH,
-      height: contentH + bottomH + 16,
+      height: contentH + bottomH + 18,
     };
   }
 
@@ -586,7 +655,8 @@ export async function exportDashboardPdf({
    */
   function activityCardPdf(activity, { x, y, w, h }) {
     const layout = activityCardPdfLayout(activity, w);
-    const { innerW, highlight, chipLines, highlightLines, effectItems, descriptionLines } = layout;
+    const { innerW, highlight, meta, metaH, observationH, highlightLines, effectItems, descriptionLines } =
+      layout;
     const status = getActivityStatus(activity?.status);
     const accentColor = highlight ? LX.gold : LX.blue;
     const padL = x + 22;
@@ -595,21 +665,8 @@ export async function exportDashboardPdf({
     setFillFromHex(doc, accentColor);
     doc.rect(x, y, 3.5, h, "F");
 
-    // Badge de status no canto superior direito.
-    const badgeW = 96;
-    const badgeH = 17;
-    const badgeX = x + w - 22 - badgeW;
-    setFillFromHex(doc, LX.panel2);
-    setDrawFromHex(doc, status.color);
-    doc.setLineWidth(0.7);
-    doc.roundedRect(badgeX, y + 18, badgeW, badgeH, 8, 8, "FD");
-    setTextFromHex(doc, status.color);
-    doc.setFont(SANS, "bold");
-    doc.setFontSize(6.5);
-    doc.text(status.label.toUpperCase(), badgeX + badgeW / 2, y + 29.5, {
-      align: "center",
-      charSpace: 0.8,
-    });
+    const badgeW = 104;
+    statusBadgePdf(status, x + w - 22 - badgeW, y + 18, badgeW);
 
     setTextFromHex(doc, LX.ink);
     doc.setFont(SANS, "bold");
@@ -627,10 +684,7 @@ export async function exportDashboardPdf({
     let cursor = y + 74;
 
     if (effectItems.length) {
-      setTextFromHex(doc, LX.gold);
-      doc.setFont(SANS, "bold");
-      doc.setFontSize(7.5);
-      doc.text("RESULTADO", padL, cursor, { charSpace: 1.6 });
+      blockLabelPdf("RESULTADO", padL, cursor);
       cursor += 17;
 
       setTextFromHex(doc, LX.body);
@@ -643,6 +697,9 @@ export async function exportDashboardPdf({
       cursor += 8;
     }
 
+    blockLabelPdf("ATIVIDADE", padL, cursor);
+    cursor += 17;
+
     if (descriptionLines.length) {
       setTextFromHex(doc, LX.muted);
       doc.setFont(SANS, "normal");
@@ -651,18 +708,22 @@ export async function exportDashboardPdf({
     }
 
     let bottomCursor = y + h - 18;
-    if (highlightLines.length) {
-      setTextFromHex(doc, LX.goldL);
-      doc.setFontSize(8.5);
-      bottomCursor -= (highlightLines.length - 1) * 11;
-      doc.text(highlightLines, padL, bottomCursor);
-      bottomCursor -= 17;
+    if (meta.length) {
+      bottomCursor -= metaH - 12;
+      metaGridPdf(meta, padL, bottomCursor, innerW);
+      bottomCursor -= 12;
     }
-    if (chipLines.length) {
-      setTextFromHex(doc, LX.dim);
-      doc.setFontSize(8);
-      bottomCursor -= (chipLines.length - 1) * 11;
-      doc.text(chipLines, padL, bottomCursor);
+    if (highlightLines.length) {
+      bottomCursor -= observationH;
+      blockLabelPdf("OBSERVAÇÃO", padL, bottomCursor);
+      setTextFromHex(doc, LX.goldL);
+      doc.setFont(SANS, "normal");
+      doc.setFontSize(8.5);
+      doc.text(
+        highlightLines.map((line) => line.replace(/^»\s*/, "")),
+        padL,
+        bottomCursor + 13
+      );
     }
   }
 
@@ -1104,6 +1165,73 @@ export async function exportDashboardPdf({
       });
       footer();
     });
+  }
+
+  // ---------- RESUMO DAS ENTREGAS ----------
+  const delivery = buildDeliverySummary(sections);
+  if (delivery.total > 0) {
+    newPage();
+    header({ eyebrow: "Fechamento", title: "Resumo das Entregas" });
+
+    const tableW = CW * 0.56;
+    const rowH = 26;
+    const boxH = Math.min(330, (delivery.rows.length + 2) * rowH + 56);
+    panel(PADX, 112, tableW, boxH);
+
+    blockLabelPdf("CATEGORIA", PADX + 22, 140);
+    setTextFromHex(doc, LX.gold);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(7.5);
+    doc.text("ENTREGAS", PADX + tableW - 22, 140, { align: "right", charSpace: 1.6 });
+
+    let rowY = 168;
+    delivery.rows.forEach((row) => {
+      setDrawFromHex(doc, LX.line);
+      doc.setLineWidth(0.5);
+      doc.line(PADX + 22, rowY - 14, PADX + tableW - 22, rowY - 14);
+      setTextFromHex(doc, LX.body);
+      doc.setFont(SANS, "normal");
+      doc.setFontSize(11);
+      doc.text(doc.splitTextToSize(row.name, tableW - 110).slice(0, 1), PADX + 22, rowY);
+      setTextFromHex(doc, LX.ink);
+      doc.text(String(row.total), PADX + tableW - 22, rowY, { align: "right" });
+      rowY += rowH;
+    });
+
+    setDrawFromHex(doc, LX.goldSoft);
+    doc.setLineWidth(1.2);
+    doc.line(PADX + 22, rowY - 14, PADX + tableW - 22, rowY - 14);
+    setTextFromHex(doc, LX.goldL);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(11.5);
+    doc.text("Total", PADX + 22, rowY);
+    doc.setFontSize(13);
+    doc.text(String(delivery.total), PADX + tableW - 22, rowY, { align: "right" });
+
+    // Checklist ao lado, derivado dos status reais das atividades.
+    const checkX = PADX + tableW + 20;
+    const checkW = CW - tableW - 20;
+    panel(checkX, 112, checkW, boxH, { fill: LX.blueTint, border: LX.blueSoft });
+
+    const blocked = statusOverview.counts.blocked;
+    const checks = [
+      `${statusOverview.counts.done} atividade(s) concluída(s)`,
+      blocked > 0 ? `${blocked} atividade(s) bloqueada(s)` : "Nenhuma pendência crítica",
+      "Entregas realizadas dentro do período",
+    ];
+
+    blockLabelPdf("PANORAMA", checkX + 22, 140);
+    let checkY = 172;
+    checks.forEach((text) => {
+      setTextFromHex(doc, LX.body);
+      doc.setFont(SANS, "normal");
+      doc.setFontSize(11);
+      // "•" no lugar do "✔" do deck: Helvetica padrão não tem o check.
+      doc.text(doc.splitTextToSize(`•  ${text}`, checkW - 44), checkX + 22, checkY);
+      checkY += 30;
+    });
+
+    footer();
   }
 
   // ---------- ENCERRAMENTO ----------
@@ -1879,30 +2007,151 @@ export async function exportDashboardPptx({
       section.activities.length > 0
   );
 
-  // Badge de status no canto superior direito do card.
-  function statusBadge(slide, status, { x, y, w = 1.5, h = 0.28 }) {
+  // Selo de status: cápsula com fundo tingido, ponto e rótulo na cor do status.
+  function statusBadge(slide, status, { x, y, w = 1.62, h = 0.3 }) {
     slide.addShape(pptx.ShapeType.roundRect, {
       x,
       y,
       w,
       h,
-      fill: { color: LX.panel2 },
+      fill: { color: status.tint },
       line: { color: status.color, pt: 0.75 },
-      rectRadius: Math.min(0.14 / Math.min(w, h), 0.5),
+      rectRadius: 0.5,
+    });
+    slide.addShape(pptx.ShapeType.ellipse, {
+      x: x + 0.16,
+      y: y + h / 2 - 0.045,
+      w: 0.09,
+      h: 0.09,
+      fill: { color: status.color },
+      line: { color: status.color, pt: 0 },
     });
     slide.addText(status.label.toUpperCase(), {
-      x,
+      x: x + 0.3,
       y,
-      w,
+      w: w - 0.42,
       h,
-      align: "center",
+      align: "left",
       valign: "middle",
       fontFace: BODY_FONT,
       fontSize: 8.5,
       bold: true,
       color: status.color,
-      charSpacing: 1.5,
+      charSpacing: 1.2,
     });
+  }
+
+  /** Rótulo de bloco com marcador dourado — o "ícone" discreto do deck. */
+  function blockLabel(slide, text, { x, y, w }) {
+    slide.addShape(pptx.ShapeType.rect, {
+      x,
+      y: y + 0.07,
+      w: 0.055,
+      h: 0.055,
+      fill: { color: LX.gold },
+      line: { color: LX.gold, pt: 0 },
+    });
+    slide.addText(text, {
+      x: x + 0.13,
+      y,
+      w: w - 0.13,
+      h: 0.2,
+      fontFace: BODY_FONT,
+      fontSize: 9,
+      bold: true,
+      color: LX.gold,
+      charSpacing: 2.5,
+    });
+  }
+
+  /** Grade de metadados no rodapé do card: chamado, tempo, equipe, prioridade. */
+  function metaGrid(slide, entries, { x, y, w }) {
+    const colW = w / 2;
+    entries.forEach((entry, index) => {
+      const col = index % 2;
+      const row = Math.floor(index / 2);
+      const cellX = x + col * colW;
+      const cellY = y + row * CARD_META_ROW_H;
+      slide.addText(entry.label, {
+        x: cellX,
+        y: cellY,
+        w: colW - 0.1,
+        h: 0.16,
+        fontFace: BODY_FONT,
+        fontSize: 7.5,
+        bold: true,
+        color: LX.dim,
+        charSpacing: 1.5,
+      });
+      slide.addText(entry.value, {
+        x: cellX,
+        y: cellY + 0.16,
+        w: colW - 0.1,
+        h: 0.22,
+        fontFace: BODY_FONT,
+        fontSize: 10.5,
+        color: LX.body,
+      });
+    });
+  }
+
+  // Caracteres por linha estimados na largura útil do card, por corpo de fonte.
+  const EFFECT_CHARS_PER_LINE = 46;
+  const DESC_CHARS_PER_LINE = 54;
+  const DESC_LINE_H = 0.19;
+  // Métricas do card — layout e desenho leem daqui para não divergirem.
+  const CARD_HEADER_H = 0.9;
+  const CARD_LABEL_H = 0.22;
+  const CARD_EFFECT_LINE_H = 0.24;
+  const CARD_EFFECT_MAX_H = 1.1;
+  const CARD_META_ROW_H = 0.4;
+  const CARD_OBSERVATION_H = 0.56;
+  const CARD_TOP = 2.05;
+  const CARD_MAX_H = 4.65;
+
+  /**
+   * Mede o card antes de desenhar, como no PDF: sem isso, conteúdo mais longo
+   * que a altura fixa faz os blocos ancorados na base invadirem a descrição.
+   */
+  function activityCardLayout(activity) {
+    const effect = preserveMultiline(activity?.systemEffect);
+    const highlight = safeText(activity?.highlight);
+    const meta = buildActivityMeta(activity);
+
+    const effectItems = effect
+      ? effect
+          .split(/\n|;/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : [];
+    const effectLines = effectItems.reduce(
+      (acc, item) => acc + Math.max(1, Math.ceil((item.length + 3) / EFFECT_CHARS_PER_LINE)),
+      0
+    );
+    const effectH = effectItems.length
+      ? Math.min(CARD_EFFECT_MAX_H, Math.max(0.28, effectLines * CARD_EFFECT_LINE_H))
+      : 0;
+
+    const descriptionLines = estimatePptLines(
+      preserveMultiline(activity?.activity),
+      DESC_CHARS_PER_LINE
+    );
+    const metaH = meta.length ? Math.ceil(meta.length / 2) * CARD_META_ROW_H + 0.06 : 0;
+    const observationH = highlight ? CARD_OBSERVATION_H : 0;
+
+    const headerH = CARD_HEADER_H;
+    const effectBlockH = effectItems.length ? CARD_LABEL_H + effectH + 0.16 : 0;
+    const descriptionBlockH = CARD_LABEL_H + Math.max(0.3, descriptionLines * DESC_LINE_H);
+
+    return {
+      effectItems,
+      effectH,
+      meta,
+      metaH,
+      observationH,
+      highlight,
+      height: headerH + effectBlockH + descriptionBlockH + metaH + observationH + 0.2,
+    };
   }
 
   /**
@@ -1928,9 +2177,9 @@ export async function exportDashboardPptx({
 
     const padL = x + 0.42;
     const innerW = w - 0.84;
-    const badgeW = 1.5;
+    const badgeW = 1.62;
 
-    statusBadge(slide, status, { x: x + w - 0.42 - badgeW, y: y + 0.26, w: badgeW });
+    statusBadge(slide, status, { x: x + w - 0.42 - badgeW, y: y + 0.25, w: badgeW });
 
     slide.addText(safeText(activity?.title) || "Atividade", {
       x: padL,
@@ -1954,51 +2203,18 @@ export async function exportDashboardPptx({
       line: { color: LX.line, pt: 0 },
     });
 
-    const chips = [];
-    if (safeText(activity?.called)) chips.push(`Chamado ${safeText(activity.called)}`);
-    if (safeText(activity?.cycleTime)) chips.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
-    if (Array.isArray(activity?.projectTeam) && activity.projectTeam.length) {
-      chips.push(`Equipe: ${activity.projectTeam.join(", ")}`);
-    }
+    const { effectItems, effectH, meta, metaH, observationH } = activityCardLayout(activity);
 
     // Rodapé montado de baixo para cima: nada se sobrepõe em nenhuma combinação.
-    const bottomRows = [];
-    if (highlight) {
-      bottomRows.push({ text: `★ ${highlight}`, color: LX.goldL, fontSize: 11, h: 0.42 });
-    }
-    if (chips.length) {
-      bottomRows.push({ text: chips.join("   ·   "), color: LX.dim, fontSize: 9.5, h: 0.28 });
-    }
-    const bottomTotal = bottomRows.reduce((acc, row) => acc + row.h, 0);
+    const bottomTotal = metaH + observationH;
 
-    let cursor = y + 0.94;
+    let cursor = y + CARD_HEADER_H;
 
-    if (effect) {
-      slide.addText("RESULTADO", {
-        x: padL,
-        y: cursor,
-        w: innerW,
-        h: 0.2,
-        fontFace: BODY_FONT,
-        fontSize: 9,
-        bold: true,
-        color: LX.gold,
-        charSpacing: 2.5,
-      });
-      cursor += 0.24;
+    if (effectItems.length) {
+      blockLabel(slide, "RESULTADO", { x: padL, y: cursor, w: innerW });
+      cursor += CARD_LABEL_H;
 
-      // Quebra de linha ou ";" viram itens; senão fica uma única linha com ✔.
-      const items = effect
-        .split(/\n|;/)
-        .map((item) => item.trim())
-        .filter(Boolean);
-      const effectLines = items.reduce(
-        (acc, item) => acc + Math.max(1, Math.ceil((item.length + 3) / 46)),
-        0
-      );
-      const effectH = Math.min(1.4, Math.max(0.3, effectLines * 0.27));
-
-      slide.addText(items.map((item) => `✔  ${item}`).join("\n"), {
+      slide.addText(effectItems.map((item) => `✔  ${item}`).join("\n"), {
         x: padL,
         y: cursor,
         w: innerW,
@@ -2009,11 +2225,22 @@ export async function exportDashboardPptx({
         lineSpacingMultiple: 1.25,
         valign: "top",
       });
-      cursor += effectH + 0.18;
+      cursor += effectH + 0.16;
     }
 
-    const descriptionH = Math.max(0.3, y + h - 0.18 - bottomTotal - cursor);
-    slide.addText(preserveMultiline(activity?.activity) || "", {
+    blockLabel(slide, "ATIVIDADE", { x: padL, y: cursor, w: innerW });
+    cursor += CARD_LABEL_H;
+
+    // Se o texto não couber no espaço restante, corta: a caixa do PPT transborda
+    // por cima dos blocos de baixo em vez de rolar.
+    const descriptionH = Math.max(0.3, y + h - 0.2 - bottomTotal - cursor);
+    const descriptionBudget = Math.max(1, Math.floor(descriptionH / DESC_LINE_H)) * DESC_CHARS_PER_LINE;
+    const descriptionText = truncateRoadmapText(
+      preserveMultiline(activity?.activity),
+      descriptionBudget
+    );
+
+    slide.addText(descriptionText, {
       x: padL,
       y: cursor,
       w: innerW,
@@ -2026,26 +2253,37 @@ export async function exportDashboardPptx({
       valign: "top",
     });
 
-    let bottomCursor = y + h - 0.18;
-    bottomRows.forEach((row) => {
-      bottomCursor -= row.h;
-      slide.addText(row.text, {
+    let bottomCursor = y + h - 0.2;
+    if (meta.length) {
+      bottomCursor -= metaH;
+      metaGrid(slide, meta, { x: padL, y: bottomCursor, w: innerW });
+    }
+    if (highlight) {
+      bottomCursor -= observationH;
+      blockLabel(slide, "OBSERVAÇÃO", { x: padL, y: bottomCursor, w: innerW });
+      slide.addText(highlight, {
         x: padL,
-        y: bottomCursor,
+        y: bottomCursor + CARD_LABEL_H,
         w: innerW,
-        h: row.h,
+        h: CARD_OBSERVATION_H - CARD_LABEL_H,
         fontFace: BODY_FONT,
-        fontSize: row.fontSize,
-        color: row.color,
+        fontSize: 11,
+        color: LX.goldL,
         valign: "top",
       });
-    });
+    }
   }
 
   /**
    * Painel de panorama: ocupa a coluna livre quando a página tem um card só.
    * Mostra o total da semana e a distribuição por status.
    */
+  /** Altura mínima do panorama: cabeçalho, total, barra e uma linha por status. */
+  function overviewCardHeight() {
+    const rows = ACTIVITY_STATUS.filter((item) => statusOverview.counts[item.value] > 0).length;
+    return 2.05 + rows * 0.38 + 0.2;
+  }
+
   function overviewCard(slide, { x, y, w, h }) {
     panel(slide, { x, y, w, h, fill: LX.blueTint, border: LX.blueSoft });
 
@@ -2192,12 +2430,21 @@ export async function exportDashboardPptx({
 
       const aGap = 0.32;
       const aW = (CONTENT_W - aGap) / 2;
-      const aH = 4.3;
+      // Os cards da página compartilham a altura do mais alto, limitada pelo
+      // espaço entre o cabeçalho e o rodapé do slide.
+      const aH = Math.min(
+        CARD_MAX_H,
+        Math.max(
+          2.4,
+          pageItems.length === 1 ? overviewCardHeight() : 0,
+          ...pageItems.map((item) => activityCardLayout(item).height)
+        )
+      );
 
       pageItems.forEach((activity, index) => {
         activityCard(slide, activity, {
           x: PAD + index * (aW + aGap),
-          y: 2.3,
+          y: CARD_TOP,
           w: aW,
           h: aH,
         });
@@ -2206,7 +2453,7 @@ export async function exportDashboardPptx({
       // Página com um card só deixaria metade do slide vazia: o panorama da
       // semana ocupa a coluna livre em vez de esticar o card.
       if (pageItems.length === 1) {
-        overviewCard(slide, { x: PAD + aW + aGap, y: 2.3, w: aW, h: aH });
+        overviewCard(slide, { x: PAD + aW + aGap, y: CARD_TOP, w: aW, h: aH });
       }
 
       if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
@@ -2385,6 +2632,130 @@ export async function exportDashboardPptx({
     if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
     footer(slide);
   });
+
+  // ---------- RESUMO DAS ENTREGAS ----------
+  // Fechamento executivo: o gestor costuma reter este slide, não o detalhe.
+  const delivery = buildDeliverySummary(sections);
+  if (delivery.total > 0) {
+    const slide = newSlide();
+    header(slide, { eyebrow: "Fechamento", title: "Resumo das Entregas" });
+
+    const tableW = CONTENT_W * 0.56;
+    const rowH = 0.42;
+    const tableH = Math.min(3.9, (delivery.rows.length + 2) * rowH + 0.5);
+    panel(slide, { x: PAD, y: 2.1, w: tableW, h: tableH });
+
+    blockLabel(slide, "CATEGORIA", { x: PAD + 0.42, y: 2.34, w: tableW / 2 });
+    slide.addText("ENTREGAS", {
+      x: PAD + tableW - 1.5,
+      y: 2.34,
+      w: 1.08,
+      h: 0.2,
+      align: "right",
+      fontFace: BODY_FONT,
+      fontSize: 9,
+      bold: true,
+      color: LX.gold,
+      charSpacing: 2.5,
+    });
+
+    let rowY = 2.72;
+    delivery.rows.forEach((row) => {
+      slide.addShape(pptx.ShapeType.rect, {
+        x: PAD + 0.42,
+        y: rowY - 0.06,
+        w: tableW - 0.84,
+        h: 0.008,
+        fill: { color: LX.line },
+        line: { color: LX.line, pt: 0 },
+      });
+      slide.addText(row.name, {
+        x: PAD + 0.42,
+        y: rowY,
+        w: tableW - 2.1,
+        h: rowH,
+        fontFace: BODY_FONT,
+        fontSize: 12.5,
+        color: LX.body,
+        valign: "middle",
+      });
+      slide.addText(String(row.total), {
+        x: PAD + tableW - 1.5,
+        y: rowY,
+        w: 1.08,
+        h: rowH,
+        align: "right",
+        fontFace: BODY_FONT,
+        fontSize: 12.5,
+        color: LX.ink,
+        valign: "middle",
+      });
+      rowY += rowH;
+    });
+
+    slide.addShape(pptx.ShapeType.rect, {
+      x: PAD + 0.42,
+      y: rowY - 0.04,
+      w: tableW - 0.84,
+      h: 0.02,
+      fill: { color: LX.goldSoft },
+      line: { color: LX.goldSoft, pt: 0 },
+    });
+    slide.addText("Total", {
+      x: PAD + 0.42,
+      y: rowY + 0.04,
+      w: tableW - 2.1,
+      h: rowH,
+      fontFace: BODY_FONT,
+      fontSize: 13,
+      bold: true,
+      color: LX.goldL,
+      valign: "middle",
+    });
+    slide.addText(String(delivery.total), {
+      x: PAD + tableW - 1.5,
+      y: rowY + 0.04,
+      w: 1.08,
+      h: rowH,
+      align: "right",
+      fontFace: BODY_FONT,
+      fontSize: 15,
+      bold: true,
+      color: LX.goldL,
+      valign: "middle",
+    });
+
+    // Checklist ao lado, derivado dos status reais das atividades.
+    const checkX = PAD + tableW + 0.4;
+    const checkW = CONTENT_W - tableW - 0.4;
+    panel(slide, { x: checkX, y: 2.1, w: checkW, h: tableH, fill: LX.blueTint, border: LX.blueSoft });
+
+    const blocked = statusOverview.counts.blocked;
+    const checks = [
+      `${statusOverview.counts.done} atividade(s) concluída(s)`,
+      blocked > 0 ? `${blocked} atividade(s) bloqueada(s)` : "Nenhuma pendência crítica",
+      "Entregas realizadas dentro do período",
+    ];
+
+    blockLabel(slide, "PANORAMA", { x: checkX + 0.42, y: 2.34, w: checkW - 0.84 });
+    let checkY = 2.75;
+    checks.forEach((text) => {
+      slide.addText(`✔  ${text}`, {
+        x: checkX + 0.42,
+        y: checkY,
+        w: checkW - 0.84,
+        h: 0.5,
+        fontFace: BODY_FONT,
+        fontSize: 12.5,
+        color: LX.body,
+        valign: "top",
+      });
+      checkY += 0.56;
+    });
+
+    if (watermarkEnabled) addPptWatermark(slide, "CONFIDENCIAL");
+    footer(slide);
+  }
 
   // ---------- ENCERRAMENTO ----------
   const closing = newSlide("closing");
