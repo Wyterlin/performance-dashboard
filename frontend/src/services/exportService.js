@@ -2150,6 +2150,7 @@ export async function exportDashboardPptx({
       metaH,
       observationH,
       highlight,
+      descriptionLines,
       height: headerH + effectBlockH + descriptionBlockH + metaH + observationH + 0.2,
     };
   }
@@ -2203,7 +2204,8 @@ export async function exportDashboardPptx({
       line: { color: LX.line, pt: 0 },
     });
 
-    const { effectItems, effectH, meta, metaH, observationH } = activityCardLayout(activity);
+    const { effectItems, effectH, meta, metaH, observationH, descriptionLines } =
+      activityCardLayout(activity);
 
     // Rodapé montado de baixo para cima: nada se sobrepõe em nenhuma combinação.
     const bottomTotal = metaH + observationH;
@@ -2234,11 +2236,16 @@ export async function exportDashboardPptx({
     // Se o texto não couber no espaço restante, corta: a caixa do PPT transborda
     // por cima dos blocos de baixo em vez de rolar.
     const descriptionH = Math.max(0.3, y + h - 0.2 - bottomTotal - cursor);
-    const descriptionBudget = Math.max(1, Math.floor(descriptionH / DESC_LINE_H)) * DESC_CHARS_PER_LINE;
-    const descriptionText = truncateRoadmapText(
-      preserveMultiline(activity?.activity),
-      descriptionBudget
-    );
+    // O epsilon é obrigatório: descriptionH vem de uma cadeia de subtrações e
+    // 0.38/0.19 dá 1.9999… em ponto flutuante, o que descartaria uma linha
+    // inteira e truncaria um texto que cabia.
+    const availableLines = Math.max(1, Math.floor(descriptionH / DESC_LINE_H + 0.02));
+    const fullDescription = preserveMultiline(activity?.activity);
+    // Só corta quando o conteúdo realmente não cabe (card no teto de altura).
+    const descriptionText =
+      descriptionLines <= availableLines
+        ? fullDescription
+        : truncateRoadmapText(fullDescription, availableLines * DESC_CHARS_PER_LINE);
 
     slide.addText(descriptionText, {
       x: padL,
