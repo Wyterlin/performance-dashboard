@@ -30,6 +30,7 @@
   --danger: #ff6b78;
   --danger-bg: rgba(255, 107, 120, 0.1);
   --danger-ln: rgba(255, 107, 120, 0.4);
+  --warn: #e8b93a;
   --ok: #6fd898;
   --glow: radial-gradient(900px 400px at 85% -10%, rgba(43, 79, 216, 0.22), transparent 60%);
   --shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
@@ -63,6 +64,7 @@
   --danger: #c23440;
   --danger-bg: rgba(194, 52, 64, 0.09);
   --danger-ln: rgba(194, 52, 64, 0.35);
+  --warn: #9a6f05;
   --ok: #1e6d2f;
   --glow: radial-gradient(900px 400px at 85% -10%, rgba(30, 63, 191, 0.1), transparent 60%);
   --shadow: 0 10px 30px rgba(16, 19, 31, 0.12);
@@ -1202,6 +1204,8 @@ button:disabled {
 
 .composer-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
 }
 
@@ -1307,6 +1311,63 @@ button:disabled {
 label small {
   color: var(--dim);
   font-size: 10px;
+}
+
+/* ---------- CONTADOR DE CARACTERES ---------- */
+.char-counter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  margin-top: 0.3rem;
+}
+
+.char-counter-track {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.char-counter-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--goldln);
+  transition: width 0.16s ease, background-color 0.16s ease;
+}
+
+.char-counter-text {
+  color: var(--dim);
+  font-size: 10px;
+  transition: color 0.16s ease;
+}
+
+.char-counter-warn .char-counter-bar {
+  background: var(--warn);
+}
+
+.char-counter-warn .char-counter-text {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.char-counter-over .char-counter-bar {
+  background: var(--danger);
+}
+
+.char-counter-over .char-counter-text {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.composer-blocker {
+  flex: 1 1 100%;
+  font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .char-counter-bar {
+    transition: none;
+  }
 }
 
 /* ---------- SELETOR DE CONTEÚDO DO PPT ---------- */

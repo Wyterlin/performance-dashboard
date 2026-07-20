@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import CharCounter from "./CharCounter";
 import DurationInput from "./DurationInput";
 import FlowStepsInput from "./FlowStepsInput";
 
@@ -17,6 +18,24 @@ const CALLED_MAX = 20;
 const BEFORE_AFTER_MAX = 40;
 const HIGHLIGHT_NOTE_MAX = 160;
 const FLOW_TEXT_MAX = 120;
+const PROJECT_TEAM_LIMIT = 10;
+const FIELD_LABELS = {
+  title: "Título",
+  subtitle: "Subtítulo",
+  impact: "Impacto",
+  activity: "Atividade",
+  highlight: "Pontos a Destacar",
+  highlightNote: "Observação do ganho",
+  cycleImplantation: "Ciclo de Implantação",
+  projectTeamInput: "Equipe do Projeto",
+};
+const ACTIVITY_PLACEHOLDER =
+  "Descreva objetivamente o que foi realizado (ex.: implementação, correção, configuração ou análise).";
+// Limites suaves: o campo aceita ultrapassar para o usuário não perder o texto,
+// mas o contador fica vermelho e o salvamento é bloqueado até caber.
+function softCap(value, max) {
+  return String(value || "").slice(0, max * 3);
+}
 
 const EMPTY_DRAFT = {
   title: "",
@@ -114,6 +133,28 @@ export default function SectionActivities({
   const calledTooLong = calledDigits.length > CALLED_MAX;
   const calledInvalid = calledTooShort || calledTooLong;
 
+  // Campos ativos no formulário atual e seus limites, para bloquear o salvamento
+  // enquanto algum texto estiver acima do limite.
+  const activeLimits = isRoadmapSection
+    ? [
+        ["title", ROADMAP_TITLE_MAX],
+        ["subtitle", ROADMAP_SUBTITLE_MAX],
+        ["impact", ROADMAP_IMPACT_MAX],
+        ["cycleImplantation", CYCLE_IMPLANTATION_MAX],
+        ["projectTeamInput", PROJECT_TEAM_MAX],
+      ]
+    : [
+        ["title", TITLE_MAX],
+        ["activity", ACTIVITY_MAX],
+        ["projectTeamInput", PROJECT_TEAM_MAX],
+        ["highlight", HIGHLIGHT_MAX],
+        ...(draft.isWeekHighlight ? [["highlightNote", HIGHLIGHT_NOTE_MAX]] : []),
+      ];
+  const overflowFields = activeLimits.filter(
+    ([field, max]) => String(draft[field] || "").length > max
+  );
+  const hasOverflow = overflowFields.length > 0;
+
   function updateDraft(field, value, maxLength) {
     if (field === "called") {
       const digits = String(value || "").replace(/\D+/g, "").slice(0, CALLED_MAX + 4);
@@ -134,32 +175,37 @@ export default function SectionActivities({
           : maxLength;
 
     if (field === "projectTeamInput") {
-      const cleaned = String(value || "")
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .slice(0, 10)
-        .join(", ");
+      // O texto é preservado como digitado (espaços e vírgulas inclusive);
+      // a separação em nomes acontece só ao salvar.
       setDraft((prev) => ({
         ...prev,
-        projectTeamInput: cleaned.slice(0, PROJECT_TEAM_MAX),
+        projectTeamInput: softCap(value, PROJECT_TEAM_MAX),
       }));
       return;
     }
 
     setDraft((prev) => ({
       ...prev,
-      [field]: String(value || "").slice(0, effectiveMaxLength),
+      [field]: softCap(value, effectiveMaxLength),
     }));
   }
 
-  function handleAdd() {
-    if (calledInvalid) return;
-    const projectTeam = String(draft.projectTeamInput || "")
+  function parseProjectTeam(value) {
+    const seen = new Set();
+    return String(value || "")
       .split(",")
       .map((item) => item.trim())
-      .filter(Boolean)
-      .slice(0, 10);
+      .filter((item) => {
+        if (!item || seen.has(item.toLowerCase())) return false;
+        seen.add(item.toLowerCase());
+        return true;
+      })
+      .slice(0, PROJECT_TEAM_LIMIT);
+  }
+
+  function handleAdd() {
+    if (calledInvalid || hasOverflow) return;
+    const projectTeam = parseProjectTeam(draft.projectTeamInput);
     const payload = isRoadmapSection
       ? {
           ...draft,
@@ -470,13 +516,13 @@ export default function SectionActivities({
                     Título
                     <input
                       value={draft.title}
-                      maxLength={isRoadmapSection ? ROADMAP_TITLE_MAX : TITLE_MAX}
                       onChange={(event) => updateDraft("title", event.target.value, TITLE_MAX)}
                       placeholder="Ex.: Correcao de erro"
                     />
-                    <small>
-                      {draft.title.length}/{isRoadmapSection ? ROADMAP_TITLE_MAX : TITLE_MAX}
-                    </small>
+                    <CharCounter
+                      value={draft.title}
+                      max={isRoadmapSection ? ROADMAP_TITLE_MAX : TITLE_MAX}
+                    />
                   </label>
 
                   {isRoadmapSection ? (
@@ -486,11 +532,10 @@ export default function SectionActivities({
                         <textarea
                           rows="2"
                           value={draft.subtitle}
-                          maxLength={ROADMAP_SUBTITLE_MAX}
                           onChange={(event) => updateDraft("subtitle", event.target.value, ROADMAP_SUBTITLE_MAX)}
                           placeholder="Ex.: Otimização do fluxo de atendimento"
                         />
-                        <small>{draft.subtitle.length}/{ROADMAP_SUBTITLE_MAX}</small>
+                        <CharCounter value={draft.subtitle} max={ROADMAP_SUBTITLE_MAX} warnAt={8} />
                       </label>
 
                       <label>
@@ -498,11 +543,10 @@ export default function SectionActivities({
                         <textarea
                           rows="4"
                           value={draft.impact}
-                          maxLength={ROADMAP_IMPACT_MAX}
                           onChange={(event) => updateDraft("impact", event.target.value, ROADMAP_IMPACT_MAX)}
                           placeholder="Ex.: Redução de 20% no tempo de processamento e aumento de previsibilidade"
                         />
-                        <small>{draft.impact.length}/{ROADMAP_IMPACT_MAX}</small>
+                        <CharCounter value={draft.impact} max={ROADMAP_IMPACT_MAX} />
                       </label>
 
                       <div className="roadmap-input-grid">
@@ -510,13 +554,16 @@ export default function SectionActivities({
                           Ciclo de Implantação
                           <input
                             value={draft.cycleImplantation}
-                            maxLength={CYCLE_IMPLANTATION_MAX}
                             onChange={(event) =>
                               updateDraft("cycleImplantation", event.target.value, CYCLE_IMPLANTATION_MAX)
                             }
                             placeholder="Ex.: 45 dias"
                           />
-                          <small>{draft.cycleImplantation.length}/{CYCLE_IMPLANTATION_MAX}</small>
+                          <CharCounter
+                            value={draft.cycleImplantation}
+                            max={CYCLE_IMPLANTATION_MAX}
+                            warnAt={10}
+                          />
                         </label>
 
                         <label>
@@ -571,13 +618,12 @@ export default function SectionActivities({
                       <textarea
                         rows="4"
                         value={draft.activity}
-                        maxLength={ACTIVITY_MAX}
                         onChange={(event) =>
                           updateDraft("activity", event.target.value, ACTIVITY_MAX)
                         }
-                        placeholder="Descreva o que foi feito"
+                        placeholder={ACTIVITY_PLACEHOLDER}
                       />
-                      <small>{draft.activity.length}/{ACTIVITY_MAX}</small>
+                      <CharCounter value={draft.activity} max={ACTIVITY_MAX} />
                     </label>
                   ) : null}
 
@@ -591,13 +637,18 @@ export default function SectionActivities({
                     Equipe do Projeto
                     <input
                       value={draft.projectTeamInput}
-                      maxLength={PROJECT_TEAM_MAX}
                       onChange={(event) =>
                         updateDraft("projectTeamInput", event.target.value, PROJECT_TEAM_MAX)
                       }
                       placeholder="Ex.: Ana Souza, Bruno Lima"
                     />
-                    <small>{draft.projectTeamInput.length}/{PROJECT_TEAM_MAX}</small>
+                    <CharCounter
+                      value={draft.projectTeamInput}
+                      max={PROJECT_TEAM_MAX}
+                      hint={`separe os nomes por vírgula · ${
+                        parseProjectTeam(draft.projectTeamInput).length
+                      }/${PROJECT_TEAM_LIMIT} pessoas`}
+                    />
                   </label>
 
                   {!isRoadmapSection ? (
@@ -606,13 +657,12 @@ export default function SectionActivities({
                       <textarea
                         rows="3"
                         value={draft.highlight}
-                        maxLength={HIGHLIGHT_MAX}
                         onChange={(event) =>
                           updateDraft("highlight", event.target.value, HIGHLIGHT_MAX)
                         }
                         placeholder="Somente se houver"
                       />
-                      <small>{draft.highlight.length}/{HIGHLIGHT_MAX}</small>
+                      <CharCounter value={draft.highlight} max={HIGHLIGHT_MAX} />
                     </label>
                   ) : null}
 
@@ -658,13 +708,12 @@ export default function SectionActivities({
                             Observação do ganho (opcional)
                             <input
                               value={draft.highlightNote}
-                              maxLength={HIGHLIGHT_NOTE_MAX}
                               onChange={(event) =>
                                 updateDraft("highlightNote", event.target.value, HIGHLIGHT_NOTE_MAX)
                               }
                               placeholder="Ex.: tempo de alteração da Transaction"
                             />
-                            <small>{(draft.highlightNote || "").length}/{HIGHLIGHT_NOTE_MAX}</small>
+                            <CharCounter value={draft.highlightNote} max={HIGHLIGHT_NOTE_MAX} />
                           </label>
                         </>
                       ) : null}
@@ -687,7 +736,16 @@ export default function SectionActivities({
                 </div>
 
                 <div className="composer-actions activity-modal-actions">
-                  <button type="button" onClick={handleAdd} disabled={calledInvalid}>
+                  {hasOverflow ? (
+                    <small className="field-error composer-blocker">
+                      Reduza o texto antes de salvar:{" "}
+                      {overflowFields
+                        .map(([field]) => FIELD_LABELS[field] || field)
+                        .join(", ")}
+                      .
+                    </small>
+                  ) : null}
+                  <button type="button" onClick={handleAdd} disabled={calledInvalid || hasOverflow}>
                     Salvar
                   </button>
                   <button type="button" className="secondary-button" onClick={handleCancel}>
