@@ -2098,60 +2098,112 @@ export async function exportDashboardPptx({
   // Caracteres por linha estimados na largura útil do card, por corpo de fonte.
   const EFFECT_CHARS_PER_LINE = 46;
   const DESC_CHARS_PER_LINE = 54;
-  const DESC_LINE_H = 0.19;
+  const EFFECT_FONT_SIZE = 13;
+  const DESC_FONT_SIZE = 11;
+  const LINE_SPACING = 1.25;
+
+  /**
+   * Altura de uma linha em polegadas. O PowerPoint reserva ~1.2x o corpo da
+   * fonte antes de aplicar o lineSpacingMultiple — estimar só corpo × múltiplo
+   * subdimensiona a caixa e o texto vaza por baixo.
+   */
+  function lineHeightIn(fontSize) {
+    return (fontSize * 1.2 * LINE_SPACING) / 72;
+  }
+
+  const EFFECT_LINE_H = lineHeightIn(EFFECT_FONT_SIZE);
+  const DESC_LINE_H = lineHeightIn(DESC_FONT_SIZE);
+
   // Métricas do card — layout e desenho leem daqui para não divergirem.
   const CARD_HEADER_H = 0.9;
   const CARD_LABEL_H = 0.22;
-  const CARD_EFFECT_LINE_H = 0.24;
-  const CARD_EFFECT_MAX_H = 1.1;
   const CARD_META_ROW_H = 0.4;
   const CARD_OBSERVATION_H = 0.56;
   const CARD_TOP = 2.05;
   const CARD_MAX_H = 4.65;
 
+  function countEffectLines(items) {
+    return items.reduce(
+      (acc, item) => acc + Math.max(1, Math.ceil((item.length + 3) / EFFECT_CHARS_PER_LINE)),
+      0
+    );
+  }
+
+  /** Reduz a lista de resultados até caber em `maxLines`. */
+  function fitEffectItems(items, maxLines) {
+    const fitted = [];
+    let used = 0;
+    for (const item of items) {
+      const cost = Math.max(1, Math.ceil((item.length + 3) / EFFECT_CHARS_PER_LINE));
+      if (used + cost > maxLines) {
+        const left = maxLines - used;
+        if (left > 0) fitted.push(truncateRoadmapText(item, left * EFFECT_CHARS_PER_LINE - 3));
+        break;
+      }
+      fitted.push(item);
+      used += cost;
+    }
+    return fitted;
+  }
+
   /**
-   * Mede o card antes de desenhar, como no PDF: sem isso, conteúdo mais longo
-   * que a altura fixa faz os blocos ancorados na base invadirem a descrição.
+   * Mede e ajusta o card para caber em `maxHeight`. Devolve os textos já
+   * cortados, para que desenho e medição não possam divergir: era essa divisão
+   * entre "quanto reservei" e "quanto desenhei" que fazia o texto se sobrepor.
    */
-  function activityCardLayout(activity) {
+  function activityCardLayout(activity, maxHeight = CARD_MAX_H) {
     const effect = preserveMultiline(activity?.systemEffect);
+    const description = preserveMultiline(activity?.activity);
     const highlight = safeText(activity?.highlight);
     const meta = buildActivityMeta(activity);
 
-    const effectItems = effect
+    const rawItems = effect
       ? effect
           .split(/\n|;/)
           .map((item) => item.trim())
           .filter(Boolean)
       : [];
-    const effectLines = effectItems.reduce(
-      (acc, item) => acc + Math.max(1, Math.ceil((item.length + 3) / EFFECT_CHARS_PER_LINE)),
-      0
-    );
-    const effectH = effectItems.length
-      ? Math.min(CARD_EFFECT_MAX_H, Math.max(0.28, effectLines * CARD_EFFECT_LINE_H))
-      : 0;
 
-    const descriptionLines = estimatePptLines(
-      preserveMultiline(activity?.activity),
-      DESC_CHARS_PER_LINE
-    );
     const metaH = meta.length ? Math.ceil(meta.length / 2) * CARD_META_ROW_H + 0.06 : 0;
     const observationH = highlight ? CARD_OBSERVATION_H : 0;
+    const fixedH =
+      CARD_HEADER_H +
+      (rawItems.length ? CARD_LABEL_H + 0.16 : 0) +
+      CARD_LABEL_H +
+      metaH +
+      observationH +
+      0.2;
 
-    const headerH = CARD_HEADER_H;
-    const effectBlockH = effectItems.length ? CARD_LABEL_H + effectH + 0.16 : 0;
-    const descriptionBlockH = CARD_LABEL_H + Math.max(0.3, descriptionLines * DESC_LINE_H);
+    const wantedEffectLines = countEffectLines(rawItems);
+    const wantedDescriptionLines = Math.max(1, estimatePptLines(description, DESC_CHARS_PER_LINE));
+
+    // Faltando espaço, encolhe a descrição até uma linha antes de tocar no
+    // resultado: a hierarquia do deck é resultado acima do detalhe técnico.
+    let effectLines = wantedEffectLines;
+    let descriptionLines = wantedDescriptionLines;
+    const flexibleH = () => effectLines * EFFECT_LINE_H + descriptionLines * DESC_LINE_H;
+    while (fixedH + flexibleH() > maxHeight && (effectLines > 1 || descriptionLines > 1)) {
+      if (descriptionLines > 1) descriptionLines -= 1;
+      else effectLines -= 1;
+    }
+
+    const effectH = rawItems.length ? effectLines * EFFECT_LINE_H : 0;
+    const descriptionH = descriptionLines * DESC_LINE_H;
 
     return {
-      effectItems,
-      effectH,
       meta,
       metaH,
       observationH,
       highlight,
-      descriptionLines,
-      height: headerH + effectBlockH + descriptionBlockH + metaH + observationH + 0.2,
+      effectH,
+      descriptionH,
+      effectItems:
+        effectLines >= wantedEffectLines ? rawItems : fitEffectItems(rawItems, effectLines),
+      descriptionText:
+        descriptionLines >= wantedDescriptionLines
+          ? description
+          : truncateRoadmapText(description, descriptionLines * DESC_CHARS_PER_LINE),
+      height: fixedH + effectH + descriptionH,
     };
   }
 
@@ -2204,12 +2256,11 @@ export async function exportDashboardPptx({
       line: { color: LX.line, pt: 0 },
     });
 
-    const { effectItems, effectH, meta, metaH, observationH, descriptionLines } =
-      activityCardLayout(activity);
+    // Mede contra a altura real do card: os textos já vêm ajustados para caber.
+    const { effectItems, effectH, meta, metaH, observationH, descriptionText, descriptionH } =
+      activityCardLayout(activity, h);
 
     // Rodapé montado de baixo para cima: nada se sobrepõe em nenhuma combinação.
-    const bottomTotal = metaH + observationH;
-
     let cursor = y + CARD_HEADER_H;
 
     if (effectItems.length) {
@@ -2222,9 +2273,9 @@ export async function exportDashboardPptx({
         w: innerW,
         h: effectH,
         fontFace: BODY_FONT,
-        fontSize: 13,
+        fontSize: EFFECT_FONT_SIZE,
         color: LX.body,
-        lineSpacingMultiple: 1.25,
+        lineSpacingMultiple: LINE_SPACING,
         valign: "top",
       });
       cursor += effectH + 0.16;
@@ -2233,20 +2284,6 @@ export async function exportDashboardPptx({
     blockLabel(slide, "ATIVIDADE", { x: padL, y: cursor, w: innerW });
     cursor += CARD_LABEL_H;
 
-    // Se o texto não couber no espaço restante, corta: a caixa do PPT transborda
-    // por cima dos blocos de baixo em vez de rolar.
-    const descriptionH = Math.max(0.3, y + h - 0.2 - bottomTotal - cursor);
-    // O epsilon é obrigatório: descriptionH vem de uma cadeia de subtrações e
-    // 0.38/0.19 dá 1.9999… em ponto flutuante, o que descartaria uma linha
-    // inteira e truncaria um texto que cabia.
-    const availableLines = Math.max(1, Math.floor(descriptionH / DESC_LINE_H + 0.02));
-    const fullDescription = preserveMultiline(activity?.activity);
-    // Só corta quando o conteúdo realmente não cabe (card no teto de altura).
-    const descriptionText =
-      descriptionLines <= availableLines
-        ? fullDescription
-        : truncateRoadmapText(fullDescription, availableLines * DESC_CHARS_PER_LINE);
-
     slide.addText(descriptionText, {
       x: padL,
       y: cursor,
@@ -2254,7 +2291,7 @@ export async function exportDashboardPptx({
       h: descriptionH,
       fontFace: BODY_FONT,
       // Menor e mais apagada que o resultado: é o detalhe técnico de apoio.
-      fontSize: 11,
+      fontSize: DESC_FONT_SIZE,
       color: LX.muted,
       lineSpacingMultiple: 1.25,
       valign: "top",
