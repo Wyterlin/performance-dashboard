@@ -424,7 +424,6 @@ export async function exportDashboardPdf({
   const SANS = "helvetica";
 
   const watermarkEnabled = Boolean(options.watermark);
-  const syncText = `Sincronização: SULTS API Service | ${formatSyncTimestamp()}`;
   const sectionKpis = manualSectionKpis(sections);
   const manualTotal = sectionKpis.reduce((acc, item) => acc + item.total, 0);
   const operationalTotal = Number(ticketSummary?.total || 0);
@@ -437,6 +436,7 @@ export async function exportDashboardPdf({
   const consolidated = operationalTotal + manualTotal;
   const rows = statusRows(ticketSummary);
   const metrics = ticketSummary?.metrics || null;
+  const statusOverview = buildStatusOverview(sections);
 
   doc.setProperties({
     title: `Performance Dashboard ${formatPeriodPpt(startDate, endDate)}`,
@@ -469,10 +469,19 @@ export async function exportDashboardPdf({
   }
 
   function footer() {
-    setTextFromHex(doc, LX.dim);
+    // Mesmo rodapé do deck: traço dourado, rótulo e carimbo em duas linhas.
+    setFillFromHex(doc, LX.gold);
+    doc.rect(PADX, H - 42, 20, 2, "F");
+
+    setTextFromHex(doc, LX.gold);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(6.5);
+    doc.text("ATUALIZADO EM", PADX, H - 30, { charSpace: 1.4 });
+
+    setTextFromHex(doc, LX.muted);
     doc.setFont(SANS, "normal");
-    doc.setFontSize(7.5);
-    doc.text(syncText, PADX, H - 22);
+    doc.setFontSize(9);
+    doc.text(`${formatSyncStamp()}  ·  SULTS API Service`, PADX, H - 17);
   }
 
   function panel(x, y, w, h, { fill = LX.panel, border = LX.line, radius = 12 } = {}) {
@@ -504,6 +513,214 @@ export async function exportDashboardPdf({
   function accent(x, y, color, w = 34) {
     setFillFromHex(doc, color);
     doc.rect(x, y, w, 3, "F");
+  }
+
+  /**
+   * Mede o card antes de desenhar. A altura acompanha o conteúdo: no A4
+   * paisagem um card de altura fixa deixaria um vão entre a descrição e o
+   * rodapé ancorado na base.
+   */
+  function activityCardPdfLayout(activity, w) {
+    const innerW = w - 44;
+    const highlight = safeText(activity?.highlight);
+    const effect = preserveMultiline(activity?.systemEffect);
+
+    doc.setFont(SANS, "normal");
+    doc.setFontSize(8);
+    const chipParts = [];
+    if (safeText(activity?.called)) chipParts.push(`Chamado ${safeText(activity.called)}`);
+    if (safeText(activity?.cycleTime)) chipParts.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
+    if (Array.isArray(activity?.projectTeam) && activity.projectTeam.length) {
+      chipParts.push(`Equipe: ${activity.projectTeam.join(", ")}`);
+    }
+    const chipLines = chipParts.length
+      ? doc.splitTextToSize(chipParts.join("   ·   "), innerW).slice(0, 2)
+      : [];
+
+    doc.setFontSize(8.5);
+    const highlightLines = highlight
+      ? doc.splitTextToSize(`» ${highlight}`, innerW).slice(0, 2)
+      : [];
+
+    // "•" está no WinAnsi; "✔" do deck não estaria.
+    doc.setFontSize(10.5);
+    const effectItems = effect
+      ? effect
+          .split(/\n|;/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .map((item) => doc.splitTextToSize(`•  ${item}`, innerW))
+      : [];
+
+    doc.setFontSize(9.5);
+    const descriptionLines = doc
+      .splitTextToSize(preserveMultiline(activity?.activity) || "", innerW)
+      .slice(0, 10);
+
+    let contentH = 74;
+    if (effectItems.length) {
+      contentH += 17 + effectItems.reduce((acc, lines) => acc + lines.length * 13, 0) + 8;
+    }
+    contentH += descriptionLines.length * 12;
+
+    const bottomH =
+      chipLines.length * 11 +
+      highlightLines.length * 11 +
+      (chipLines.length && highlightLines.length ? 6 : 0);
+
+    return {
+      innerW,
+      highlight,
+      chipLines,
+      highlightLines,
+      effectItems,
+      descriptionLines,
+      bottomH,
+      height: contentH + bottomH + 16,
+    };
+  }
+
+  /**
+   * Card de atividade — espelha o do deck: status, título, resultado em
+   * destaque e só então a descrição técnica.
+   */
+  function activityCardPdf(activity, { x, y, w, h }) {
+    const layout = activityCardPdfLayout(activity, w);
+    const { innerW, highlight, chipLines, highlightLines, effectItems, descriptionLines } = layout;
+    const status = getActivityStatus(activity?.status);
+    const accentColor = highlight ? LX.gold : LX.blue;
+    const padL = x + 22;
+
+    panel(x, y, w, h);
+    setFillFromHex(doc, accentColor);
+    doc.rect(x, y, 3.5, h, "F");
+
+    // Badge de status no canto superior direito.
+    const badgeW = 96;
+    const badgeH = 17;
+    const badgeX = x + w - 22 - badgeW;
+    setFillFromHex(doc, LX.panel2);
+    setDrawFromHex(doc, status.color);
+    doc.setLineWidth(0.7);
+    doc.roundedRect(badgeX, y + 18, badgeW, badgeH, 8, 8, "FD");
+    setTextFromHex(doc, status.color);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(6.5);
+    doc.text(status.label.toUpperCase(), badgeX + badgeW / 2, y + 29.5, {
+      align: "center",
+      charSpace: 0.8,
+    });
+
+    setTextFromHex(doc, LX.ink);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(13);
+    doc.text(
+      doc.splitTextToSize(safeText(activity?.title) || "Atividade", innerW - badgeW - 14).slice(0, 2),
+      padL,
+      y + 32
+    );
+
+    setDrawFromHex(doc, LX.line);
+    doc.setLineWidth(0.6);
+    doc.line(padL, y + 52, padL + innerW, y + 52);
+
+    let cursor = y + 74;
+
+    if (effectItems.length) {
+      setTextFromHex(doc, LX.gold);
+      doc.setFont(SANS, "bold");
+      doc.setFontSize(7.5);
+      doc.text("RESULTADO", padL, cursor, { charSpace: 1.6 });
+      cursor += 17;
+
+      setTextFromHex(doc, LX.body);
+      doc.setFont(SANS, "normal");
+      doc.setFontSize(10.5);
+      effectItems.forEach((lines) => {
+        doc.text(lines, padL, cursor);
+        cursor += lines.length * 13;
+      });
+      cursor += 8;
+    }
+
+    if (descriptionLines.length) {
+      setTextFromHex(doc, LX.muted);
+      doc.setFont(SANS, "normal");
+      doc.setFontSize(9.5);
+      doc.text(descriptionLines, padL, cursor);
+    }
+
+    let bottomCursor = y + h - 18;
+    if (highlightLines.length) {
+      setTextFromHex(doc, LX.goldL);
+      doc.setFontSize(8.5);
+      bottomCursor -= (highlightLines.length - 1) * 11;
+      doc.text(highlightLines, padL, bottomCursor);
+      bottomCursor -= 17;
+    }
+    if (chipLines.length) {
+      setTextFromHex(doc, LX.dim);
+      doc.setFontSize(8);
+      bottomCursor -= (chipLines.length - 1) * 11;
+      doc.text(chipLines, padL, bottomCursor);
+    }
+  }
+
+  /** Altura mínima do panorama: cabeçalho, total, barra e uma linha por status. */
+  function overviewCardPdfHeight() {
+    const rows = ACTIVITY_STATUS.filter((item) => statusOverview.counts[item.value] > 0).length;
+    return 132 + rows * 26 + 8;
+  }
+
+  /** Painel de panorama, gêmeo do slide: ocupa a coluna livre da página. */
+  function overviewCardPdf({ x, y, w, h }) {
+    panel(x, y, w, h, { fill: LX.blueTint, border: LX.blueSoft });
+
+    const padL = x + 26;
+    const innerW = w - 52;
+
+    setTextFromHex(doc, LX.gold);
+    doc.setFont(SANS, "bold");
+    doc.setFontSize(7.5);
+    doc.text("PANORAMA DA SEMANA", padL, y + 34, { charSpace: 1.6 });
+
+    setTextFromHex(doc, LX.ink);
+    doc.setFont(SERIF, "bold");
+    doc.setFontSize(38);
+    const totalText = String(statusOverview.total);
+    doc.text(totalText, padL, y + 78);
+    const totalWidth = doc.getTextWidth(totalText);
+    setTextFromHex(doc, LX.muted);
+    doc.setFont(SERIF, "normal");
+    doc.setFontSize(13);
+    doc.text("atividades", padL + totalWidth + 10, y + 78);
+
+    const present = ACTIVITY_STATUS.filter((item) => statusOverview.counts[item.value] > 0);
+
+    if (statusOverview.total > 0) {
+      let barX = padL;
+      present.forEach((item) => {
+        const segW = (statusOverview.counts[item.value] / statusOverview.total) * innerW;
+        setFillFromHex(doc, item.color);
+        doc.rect(barX, y + 96, segW, 9, "F");
+        barX += segW;
+      });
+    }
+
+    let rowY = y + 132;
+    present.forEach((item) => {
+      setFillFromHex(doc, item.color);
+      doc.circle(padL + 4, rowY - 3.5, 4, "F");
+      setTextFromHex(doc, LX.body);
+      doc.setFont(SANS, "normal");
+      doc.setFontSize(10.5);
+      doc.text(item.label, padL + 16, rowY);
+      setTextFromHex(doc, item.color);
+      doc.setFont(SANS, "bold");
+      doc.setFontSize(11);
+      doc.text(String(statusOverview.counts[item.value]), padL + innerW, rowY, { align: "right" });
+      rowY += 26;
+    });
   }
 
   // ---------- 1. CAPA ----------
@@ -767,7 +984,7 @@ export async function exportDashboardPdf({
 
   populated.forEach((section, sectionIndex) => {
     const activities = sortActivitiesByPosition(section.activities || []);
-    const pages = chunkList(activities, 4);
+    const pages = chunkList(activities, 2);
 
     pages.forEach((pageItems, pageIndex) => {
       newPage();
@@ -785,60 +1002,25 @@ export async function exportDashboardPdf({
 
       const aGap = 16;
       const aW = (CW - aGap) / 2;
-      const aH = 176;
+      // Cards e panorama da página compartilham a altura do mais alto.
+      const aH = Math.min(
+        430,
+        Math.max(
+          200,
+          pageItems.length === 1 ? overviewCardPdfHeight() : 0,
+          ...pageItems.map((item) => activityCardPdfLayout(item, aW).height)
+        )
+      );
+
       pageItems.forEach((activity, index) => {
-        const col = index % 2;
-        const line = Math.floor(index / 2);
-        const x = PADX + col * (aW + aGap);
-        const y = 112 + line * (aH + aGap);
-        const highlight = safeText(activity?.highlight);
-        const color = highlight ? LX.gold : LX.blue;
-
-        panel(x, y, aW, aH);
-        setFillFromHex(doc, color);
-        doc.rect(x, y, 3.5, aH, "F");
-
-        setTextFromHex(doc, LX.ink);
-        doc.setFont(SANS, "bold");
-        doc.setFontSize(12);
-        doc.text(doc.splitTextToSize(safeText(activity?.title) || "Atividade", aW - 40), x + 18, y + 26);
-
-        setTextFromHex(doc, LX.muted);
-        doc.setFont(SANS, "normal");
-        doc.setFontSize(9.5);
-        const desc = doc.splitTextToSize(preserveMultiline(activity?.activity) || "", aW - 40);
-        doc.text(desc.slice(0, 4), x + 18, y + 50);
-
-        const effect = preserveMultiline(activity?.systemEffect);
-        if (effect) {
-          setTextFromHex(doc, LX.blueL);
-          doc.setFontSize(8.5);
-          doc.text(
-            // Sem glifo decorativo: o PDF usa Helvetica (WinAnsi) e símbolos
-            // fora dessa tabela saem corrompidos.
-            doc.splitTextToSize(`Efeito no sistema: ${effect}`, aW - 40).slice(0, 2),
-            x + 18,
-            y + aH - 70
-          );
-        }
-
-        const chips = [];
-        if (safeText(activity?.called)) chips.push(`Chamado ${safeText(activity.called)}`);
-        if (safeText(activity?.cycleTime)) chips.push(`Cycle Time: ${safeText(activity.cycleTime)}`);
-        if (Array.isArray(activity?.projectTeam) && activity.projectTeam.length) {
-          chips.push(`Equipe: ${activity.projectTeam.join(", ")}`);
-        }
-        if (chips.length) {
-          setTextFromHex(doc, LX.blueL);
-          doc.setFontSize(8);
-          doc.text(doc.splitTextToSize(chips.join("   ·   "), aW - 40).slice(0, 2), x + 18, y + aH - 46);
-        }
-        if (highlight) {
-          setTextFromHex(doc, LX.goldL);
-          doc.setFontSize(8.5);
-          doc.text(doc.splitTextToSize(`» ${highlight}`, aW - 40).slice(0, 2), x + 18, y + aH - 22);
-        }
+        activityCardPdf(activity, { x: PADX + index * (aW + aGap), y: 112, w: aW, h: aH });
       });
+
+      // Mesma regra do deck: página com um card só ganha o panorama ao lado.
+      if (pageItems.length === 1) {
+        overviewCardPdf({ x: PADX + aW + aGap, y: 112, w: aW, h: aH });
+      }
+
       footer();
     });
   });
